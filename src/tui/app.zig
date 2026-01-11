@@ -8,6 +8,7 @@ const SearchBar = @import("widgets/searchbar.zig").SearchBar;
 const PreviewPane = @import("widgets/preview.zig").PreviewPane;
 const TreeView = @import("widgets/tree.zig").TreeView;
 const TreeEntry = @import("widgets/tree.zig").TreeEntry;
+const TreeNode = @import("widgets/tree.zig").TreeNode;
 
 pub const Mode = enum {
     list,
@@ -459,15 +460,20 @@ pub const App = struct {
     fn renderTree(self: *App, win: vaxis.Window) void {
         const nodes = self.tree.visibleList();
         defer self.allocator.free(nodes);
+        const max_score = treeMaxScore(nodes);
         var row: u16 = 0;
         for (nodes) |node| {
             if (row >= win.height) break;
             const indent = std.mem.repeat(self.allocator, " ", node.depth * 2) catch "";
             defer if (indent.len > 0) self.allocator.free(indent);
+            const has_children = node.children.len > 0;
+            const expanded = has_children and self.tree.expanded.contains(node);
+            const glyph = if (!has_children) " " else if (expanded) "▾" else "▸";
+            const name = if (node.name.len == 0) "/" else node.name;
             const line = std.fmt.allocPrint(
                 self.allocator,
-                "{s}{s} {d:.1}",
-                .{ indent, node.name, node.score },
+                "{s}{s} {s}",
+                .{ indent, glyph, name },
             ) catch "";
             defer if (line.len > 0) self.allocator.free(line);
             const selected = self.tree.selected == node;
@@ -475,8 +481,22 @@ pub const App = struct {
                 styleFromTheme(self.theme.text_primary, self.theme.bg_highlight, true)
             else
                 styleFromTheme(self.theme.text_primary, null, false);
-            const seg = vaxis.Segment{ .text = line, .style = style };
-            _ = win.print(&.{seg}, .{ .row_offset = row, .col_offset = 0, .wrap = .none });
+            var segments = std.ArrayList(vaxis.Segment).init(self.allocator);
+            defer segments.deinit();
+            segments.append(.{ .text = line, .style = style }) catch {};
+
+            const bar = scoreBar(self.allocator, node.score, max_score, 8) catch "";
+            defer if (bar.len > 0) self.allocator.free(bar);
+            segments.append(.{ .text = "  ", .style = style }) catch {};
+            segments.append(.{ .text = bar, .style = styleFromTheme(self.theme.score_bar, null, false) }) catch {};
+
+            const score_text = std.fmt.allocPrint(self.allocator, "  {d:.1}", .{node.score}) catch "";
+            defer if (score_text.len > 0) self.allocator.free(score_text);
+            if (score_text.len > 0) {
+                segments.append(.{ .text = score_text, .style = style }) catch {};
+            }
+
+            _ = win.print(segments.items, .{ .row_offset = row, .col_offset = 0, .wrap = .none });
             row += 1;
         }
     }
@@ -729,4 +749,12 @@ fn scoreBar(allocator: std.mem.Allocator, score: f64, max_score: f64, width: usi
         }
     }
     return out.toOwnedSlice();
+}
+
+fn treeMaxScore(nodes: [](*TreeNode)) f64 {
+    var max_score: f64 = 1.0;
+    for (nodes) |node| {
+        if (node.score > max_score) max_score = node.score;
+    }
+    return max_score;
 }
