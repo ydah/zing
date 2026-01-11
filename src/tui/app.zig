@@ -97,6 +97,8 @@ pub const App = struct {
             vaxis.Winsize{ .rows = 40, .cols = 100, .x_pixel = 0, .y_pixel = 0 };
         try vx.resize(self.allocator, tty.writer(), winsize);
 
+        self.renderSplash(&vx, &tty);
+
         var loop = vaxis.Loop(vaxis.Event){
             .tty = &tty,
             .vaxis = &vx,
@@ -291,6 +293,75 @@ pub const App = struct {
         }));
 
         vx.render(tty.writer()) catch {};
+    }
+
+    fn renderSplash(self: *App, vx: *vaxis.Vaxis, tty: *vaxis.Tty) void {
+        const win = vx.window();
+        if (win.width == 0 or win.height == 0) return;
+
+        const logo = [_][]const u8{
+            " _______ _____  _   _  _____ ",
+            "|___  / |_   _|| \\ | ||  __ \\",
+            "   / /    | |  |  \\| || |  | |",
+            "  / /__  _| |_ | |\\  || |__| |",
+            " /_____| \\___/ |_| \\_||_____/ ",
+        };
+        const logo_width = 29;
+        const logo_height = logo.len;
+        const start_row: u16 = if (win.height > logo_height + 3)
+            @intCast((win.height - logo_height) / 2)
+        else
+            0;
+        const start_col: u16 = if (win.width > logo_width)
+            @intCast((win.width - logo_width) / 2)
+        else
+            0;
+
+        const total_frames: usize = 18;
+        var frame: usize = 0;
+        while (frame < total_frames) : (frame += 1) {
+            win.clear();
+            win.hideCursor();
+
+            const highlight_row = frame % logo_height;
+            var row: u16 = 0;
+            while (row < logo_height and start_row + row < win.height) : (row += 1) {
+                const style = if (row == highlight_row)
+                    styleFromTheme(self.theme.match_highlight, null, true)
+                else
+                    styleFromTheme(self.theme.text_primary, null, false);
+                const seg = vaxis.Segment{ .text = logo[row], .style = style };
+                _ = win.print(&.{seg}, .{ .row_offset = start_row + row, .col_offset = start_col, .wrap = .none });
+            }
+
+            const bar_len: usize = 12;
+            var bar_buf: [32]u8 = undefined;
+            bar_buf[0] = '[';
+            var i: usize = 0;
+            const filled = frame % (bar_len + 1);
+            while (i < bar_len) : (i += 1) {
+                bar_buf[1 + i] = if (i < filled) '=' else ' ';
+            }
+            bar_buf[1 + bar_len] = ']';
+            const bar_text = bar_buf[0 .. bar_len + 2];
+            if (bar_text.len > 2) {
+                const bar_row = start_row + @intCast(logo_height + 1);
+                if (bar_row < win.height) {
+                    const bar_col: u16 = if (win.width > bar_text.len)
+                        @intCast((win.width - bar_text.len) / 2)
+                    else
+                        0;
+                    const seg = vaxis.Segment{
+                        .text = bar_text,
+                        .style = styleFromTheme(self.theme.score_bar, null, false),
+                    };
+                    _ = win.print(&.{seg}, .{ .row_offset = bar_row, .col_offset = bar_col, .wrap = .none });
+                }
+            }
+
+            vx.render(tty.writer()) catch {};
+            std.time.sleep(35 * std.time.ns_per_ms);
+        }
     }
 
     pub fn renderSearchBar(self: *App, win: vaxis.Window) void {
