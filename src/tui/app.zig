@@ -744,19 +744,18 @@ fn appendHighlightedSegments(
     match_style: vaxis.Style,
 ) !void {
     var pos_idx: usize = 0;
-    var i: usize = 0;
-    while (i < text.len) {
-        const is_match = pos_idx < positions.len and positions[pos_idx] == i;
-        const start = i;
+    var byte_idx: usize = 0;
+    var iter = vaxis.unicode.graphemeIterator(text);
+    while (iter.next()) |g| {
+        const bytes = g.bytes(text);
+        const start = byte_idx;
+        byte_idx += bytes.len;
+        const is_match = pos_idx < positions.len and positions[pos_idx] == start;
         if (is_match) {
-            i += 1;
             pos_idx += 1;
-            try segments.append(.{ .text = text[start..i], .style = match_style });
+            try segments.append(.{ .text = text[start..byte_idx], .style = match_style });
         } else {
-            while (i < text.len and !(pos_idx < positions.len and positions[pos_idx] == i)) {
-                i += 1;
-            }
-            try segments.append(.{ .text = text[start..i], .style = base_style });
+            try segments.append(.{ .text = text[start..byte_idx], .style = base_style });
         }
     }
     _ = allocator;
