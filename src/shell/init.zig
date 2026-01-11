@@ -5,6 +5,9 @@ pub const Shell = enum {
 };
 
 pub fn getInitScript(shell: Shell) []const u8 {
-    _ = shell;
-    return "";
+    return switch (shell) {
+        .bash => @import("bash.zig").script(),
+        .zsh => @import("zsh.zig").script(),
+        .fish => @import("fish.zig").script(),
+    };
 }
