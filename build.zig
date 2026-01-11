@@ -4,8 +4,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const libvaxis_dep = b.dependency("libvaxis", .{});
-    const sqlite_dep = b.dependency("sqlite-zig", .{});
+    const libvaxis_dep = b.dependency("libvaxis", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const sqlite_dep = b.dependency("sqlite-zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
