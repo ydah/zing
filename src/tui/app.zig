@@ -147,6 +147,12 @@ pub const App = struct {
         if (key.matches('q', .{})) return true;
         if (key.matches(vaxis.Key.escape, .{})) return true;
 
+        if (self.state.mode == .list and key.matches('/', .{})) {
+            try self.enterSubdirMode();
+            self.state.last_input_ns = std.time.nanoTimestamp();
+            return false;
+        }
+
         if (key.matches(vaxis.Key.up, .{}) or key.matches('k', .{})) {
             if (self.state.mode == .tree) {
                 self.tree.moveUp();
