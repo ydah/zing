@@ -3,6 +3,7 @@ const Database = @import("../core/database.zig").Database;
 const theme_mod = @import("theme.zig");
 const Theme = theme_mod.Theme;
 const vaxis = @import("vaxis");
+const matcher = @import("../core/matcher.zig");
 const SearchBar = @import("widgets/searchbar.zig").SearchBar;
 const PreviewPane = @import("widgets/preview.zig").PreviewPane;
 const TreeView = @import("widgets/tree.zig").TreeView;
@@ -43,6 +44,7 @@ pub const AppState = struct {
 pub const SearchResult = struct {
     path: []const u8,
     score: f64,
+    match_positions: []usize,
 };
 
 pub const App = struct {
@@ -335,20 +337,38 @@ pub const App = struct {
         self.state.scroll_offset = start;
 
         const end = @min(total, start + height);
+        const max_score = self.maxScore();
         var row: u16 = 0;
         var idx = start;
         while (idx < end) : (idx += 1) {
             const entry = self.state.results[idx];
             const selected = idx == self.state.selected_index;
-            const style = if (selected)
-                styleFromTheme(self.theme.text_primary, self.theme.bg_highlight, true)
+            const bg_color: ?theme_mod.Color = if (selected) self.theme.bg_highlight else null;
+            const base_style = if (selected)
+                styleFromTheme(self.theme.text_primary, bg_color, true)
             else
                 styleFromTheme(self.theme.text_primary, null, false);
+            const match_style = if (selected)
+                styleFromTheme(self.theme.match_highlight, bg_color, true)
+            else
+                styleFromTheme(self.theme.match_highlight, null, true);
 
-            const line = std.fmt.allocPrint(self.allocator, "{s}  {d:.2}", .{ entry.path, entry.score }) catch "";
-            defer if (line.len > 0) self.allocator.free(line);
-            const segment = vaxis.Segment{ .text = line, .style = style };
-            _ = win.print(&.{segment}, .{ .row_offset = row, .col_offset = 0, .wrap = .none });
+            var segments = std.ArrayList(vaxis.Segment).init(self.allocator);
+            defer segments.deinit();
+            appendHighlightedSegments(self.allocator, &segments, entry.path, entry.match_positions, base_style, match_style) catch {};
+
+            const bar = scoreBar(self.allocator, entry.score, max_score, 10) catch "";
+            defer if (bar.len > 0) self.allocator.free(bar);
+            segments.append(.{ .text = "  ", .style = base_style }) catch {};
+            segments.append(.{ .text = bar, .style = styleFromTheme(self.theme.score_bar, bg_color, false) }) catch {};
+
+            const score_text = std.fmt.allocPrint(self.allocator, "  {d:.2}", .{entry.score}) catch "";
+            defer if (score_text.len > 0) self.allocator.free(score_text);
+            if (score_text.len > 0) {
+                segments.append(.{ .text = score_text, .style = base_style }) catch {};
+            }
+
+            _ = win.print(segments.items, .{ .row_offset = row, .col_offset = 0, .wrap = .none });
             row += 1;
         }
     }
@@ -367,7 +387,10 @@ pub const App = struct {
         };
         _ = win.print(&.{header_seg}, .{ .row_offset = 0, .col_offset = 0, .wrap = .none });
 
+        const col_width: u16 = 24;
+        const columns = @max(@as(u16, 1), win.width / col_width);
         var row: u16 = 1;
+        var col: u16 = 0;
         for (self.preview.entries) |entry| {
             if (row >= win.height) break;
             const name = if (entry.kind == .directory)
@@ -376,8 +399,12 @@ pub const App = struct {
                 entry.name;
             defer if (name.ptr != entry.name.ptr) self.allocator.free(name);
             const seg = vaxis.Segment{ .text = name, .style = styleFromTheme(self.theme.text_secondary, null, false) };
-            _ = win.print(&.{seg}, .{ .row_offset = row, .col_offset = 0, .wrap = .none });
-            row += 1;
+            _ = win.print(&.{seg}, .{ .row_offset = row, .col_offset = col * col_width, .wrap = .none });
+            col += 1;
+            if (col >= columns) {
+                col = 0;
+                row += 1;
+            }
         }
     }
 
@@ -403,7 +430,7 @@ pub const App = struct {
             const query = self.state.searchbar.getQuery();
             const results = try self.db.search(self.allocator, query, 100);
             self.freeResults();
-            self.state.results = try toSearchResults(self.allocator, results);
+            self.state.results = try toSearchResults(self.allocator, results, query);
             self.state.selected_index = 0;
             self.state.scroll_offset = 0;
             try self.updateTree();
@@ -414,6 +441,7 @@ pub const App = struct {
     fn freeResults(self: *App) void {
         for (self.state.results) |result| {
             self.allocator.free(result.path);
+            self.allocator.free(result.match_positions);
         }
         self.allocator.free(self.state.results);
         self.state.results = &.{};
@@ -528,6 +556,14 @@ pub const App = struct {
         self.state.selected_index += delta;
     }
 
+    fn maxScore(self: *App) f64 {
+        var max_score: f64 = 1.0;
+        for (self.state.results) |entry| {
+            if (entry.score > max_score) max_score = entry.score;
+        }
+        return max_score;
+    }
+
     fn enterSubdirMode(self: *App) !void {
         var owned_base: ?[]u8 = null;
         const selected = self.selectedPath();
@@ -562,12 +598,19 @@ pub const App = struct {
     }
 };
 
-fn toSearchResults(allocator: std.mem.Allocator, entries: []const @import("../core/database.zig").Entry) ![]SearchResult {
+fn toSearchResults(
+    allocator: std.mem.Allocator,
+    entries: []const @import("../core/database.zig").Entry,
+    query: []const u8,
+) ![]SearchResult {
     var results = try allocator.alloc(SearchResult, entries.len);
     for (entries, 0..) |entry, idx| {
+        const match = if (query.len > 0) try matcher.fuzzyMatch(allocator, query, entry.path) else null;
+        const positions = if (match) |m| m.positions else try allocator.alloc(usize, 0);
         results[idx] = .{
             .path = entry.path,
             .score = entry.score,
+            .match_positions = positions,
         };
     }
     allocator.free(entries);
@@ -606,17 +649,19 @@ fn findSubdirs(
         if (entry.kind != .directory) continue;
         if (query.len == 0) {
             const path = try std.fs.path.join(allocator, &.{ base, entry.name });
-            try matches.append(.{ .result = .{ .path = path, .score = 0.0 }, .score = 0.0 });
+            try matches.append(.{
+                .result = .{ .path = path, .score = 0.0, .match_positions = try allocator.alloc(usize, 0) },
+                .score = 0.0,
+            });
             continue;
         }
-        const match = try @import("../core/matcher.zig").fuzzyMatch(allocator, query, entry.name);
+        const match = try matcher.fuzzyMatch(allocator, query, entry.name);
         if (match) |m| {
             const path = try std.fs.path.join(allocator, &.{ base, entry.name });
             try matches.append(.{
-                .result = .{ .path = path, .score = @floatFromInt(m.score) },
+                .result = .{ .path = path, .score = @floatFromInt(m.score), .match_positions = m.positions },
                 .score = m.score,
             });
-            allocator.free(m.positions);
         }
     }
 
@@ -628,6 +673,7 @@ fn findSubdirs(
     }
     for (matches.items[count..]) |item| {
         allocator.free(item.result.path);
+        allocator.free(item.result.match_positions);
     }
     return results;
 }
@@ -639,4 +685,48 @@ const ScoredResult = struct {
 
 fn scoredResultDesc(_: void, a: ScoredResult, b: ScoredResult) bool {
     return a.score > b.score;
+}
+
+fn appendHighlightedSegments(
+    allocator: std.mem.Allocator,
+    segments: *std.ArrayList(vaxis.Segment),
+    text: []const u8,
+    positions: []const usize,
+    base_style: vaxis.Style,
+    match_style: vaxis.Style,
+) !void {
+    var pos_idx: usize = 0;
+    var i: usize = 0;
+    while (i < text.len) {
+        const is_match = pos_idx < positions.len and positions[pos_idx] == i;
+        const start = i;
+        if (is_match) {
+            i += 1;
+            pos_idx += 1;
+            try segments.append(.{ .text = text[start..i], .style = match_style });
+        } else {
+            while (i < text.len and !(pos_idx < positions.len and positions[pos_idx] == i)) {
+                i += 1;
+            }
+            try segments.append(.{ .text = text[start..i], .style = base_style });
+        }
+    }
+    _ = allocator;
+}
+
+fn scoreBar(allocator: std.mem.Allocator, score: f64, max_score: f64, width: usize) ![]u8 {
+    if (width == 0) return allocator.alloc(u8, 0);
+    const ratio = if (max_score == 0.0) 0.0 else score / max_score;
+    const filled = @min(width, @as(usize, @intFromFloat(ratio * @as(f64, @floatFromInt(width)))));
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+    var i: usize = 0;
+    while (i < width) : (i += 1) {
+        if (i < filled) {
+            try out.appendSlice("█");
+        } else {
+            try out.appendSlice(" ");
+        }
+    }
+    return out.toOwnedSlice();
 }
