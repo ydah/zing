@@ -24,9 +24,23 @@ pub fn importData(allocator: std.mem.Allocator, db: *Database, source: ImportSou
 fn importZoxide(allocator: std.mem.Allocator, db: *Database, path: ?[]const u8) !ImportResult {
     const file_path = if (path) |p| try allocator.dupe(u8, p) else try defaultZoxidePath(allocator);
     defer allocator.free(file_path);
-    const data = try readTextFile(allocator, file_path);
+    const data = readTextFile(allocator, file_path) catch |err| switch (err) {
+        error.UnsupportedFormat => return importZoxideBinary(allocator, db, file_path),
+        else => return err,
+    };
     defer allocator.free(data);
+    return importZoxideText(db, data);
+}
 
+fn importZoxideBinary(allocator: std.mem.Allocator, db: *Database, path: []const u8) !ImportResult {
+    if (try runZoxideDump(allocator, path)) |dump| {
+        defer allocator.free(dump);
+        return importZoxideText(db, dump);
+    }
+    return error.UnsupportedFormat;
+}
+
+fn importZoxideText(db: *Database, data: []const u8) !ImportResult {
     var count: usize = 0;
     var it = std.mem.split(u8, data, "\n");
     while (it.next()) |line| {
@@ -46,6 +60,33 @@ fn importZoxide(allocator: std.mem.Allocator, db: *Database, path: ?[]const u8) 
         count += 1;
     }
     return .{ .count = count };
+}
+
+fn runZoxideDump(allocator: std.mem.Allocator, db_path: []const u8) !?[]u8 {
+    var argv = [_][]const u8{ "zoxide", "query", "-ls" };
+    var child = std.process.Child.init(&argv, allocator);
+    var env_map = try std.process.getEnvMap(allocator);
+    defer env_map.deinit();
+    env_map.put("ZOXIDE_DB_PATH", db_path) catch {};
+    env_map.put("ZOXIDE_DB", db_path) catch {};
+    child.env_map = &env_map;
+    const result = child.run() catch return null;
+    defer allocator.free(result.stderr);
+    if (result.term.Exited != 0) {
+        allocator.free(result.stdout);
+        // Retry without score flag.
+        var argv2 = [_][]const u8{ "zoxide", "query", "-l" };
+        var child2 = std.process.Child.init(&argv2, allocator);
+        child2.env_map = &env_map;
+        const result2 = child2.run() catch return null;
+        defer allocator.free(result2.stderr);
+        if (result2.term.Exited != 0) {
+            allocator.free(result2.stdout);
+            return null;
+        }
+        return result2.stdout;
+    }
+    return result.stdout;
 }
 
 fn importZ(allocator: std.mem.Allocator, db: *Database, path: ?[]const u8) !ImportResult {

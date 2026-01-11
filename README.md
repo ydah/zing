@@ -26,7 +26,7 @@ zing init fish | source
 
 ```bash
 z <query>              # jump to best match
-zi [query]             # interactive (stub)
+zi [query]             # interactive selector (TUI)
 
 zing add <path>        # add path
 zing remove <path>     # remove path
@@ -76,5 +76,6 @@ patterns = ["^/tmp", ".*/node_modules/.*"]
 
 ## Notes
 
-- TUI rendering is stubbed until libvaxis is fully integrated.
-- zoxide binary `db.zo` import is not supported yet; text-format exports work.
+- TUI is functional for list/preview/tree/stats, but rendering is still minimal.
+- TUI subdirectory mode: press `/` to enter, `Backspace` on empty to exit.
+- zoxide binary `db.zo` import uses the `zoxide` CLI if available; text-format exports also work.
