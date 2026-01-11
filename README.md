@@ -26,6 +26,7 @@ zing init fish | source
 
 ```bash
 z <query>              # jump to best match
+z <q1> <q2>            # AND search across multiple terms
 zi [query]             # interactive selector (TUI)
 
 zing add <path>        # add path

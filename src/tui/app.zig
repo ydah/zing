@@ -648,8 +648,7 @@ fn toSearchResults(
 ) ![]SearchResult {
     var results = try allocator.alloc(SearchResult, entries.len);
     for (entries, 0..) |entry, idx| {
-        const match = if (query.len > 0) try matcher.fuzzyMatch(allocator, query, entry.path) else null;
-        const positions = if (match) |m| m.positions else try allocator.alloc(usize, 0);
+        const positions = try collectMatchPositions(allocator, query, entry.path);
         results[idx] = .{
             .path = entry.path,
             .score = entry.score,
@@ -801,6 +800,39 @@ fn treeMaxScore(nodes: [](*TreeNode)) f64 {
         if (node.score > max_score) max_score = node.score;
     }
     return max_score;
+}
+
+fn collectMatchPositions(allocator: std.mem.Allocator, query: []const u8, path: []const u8) ![]usize {
+    var terms = std.ArrayList([]const u8).init(allocator);
+    defer terms.deinit();
+    var tok = std.mem.tokenizeAny(u8, query, " \t\r\n");
+    while (tok.next()) |term| {
+        if (term.len > 0) try terms.append(term);
+    }
+    if (terms.items.len == 0) return allocator.alloc(usize, 0);
+
+    var positions = std.ArrayList(usize).init(allocator);
+    defer positions.deinit();
+    for (terms.items) |term| {
+        const match = try matcher.fuzzyMatch(allocator, term, path);
+        if (match) |m| {
+            try positions.appendSlice(m.positions);
+            allocator.free(m.positions);
+        }
+    }
+    if (positions.items.len == 0) return allocator.alloc(usize, 0);
+
+    std.sort.insertion(usize, positions.items, {}, std.sort.asc(usize));
+    var dedup = std.ArrayList(usize).init(allocator);
+    defer dedup.deinit();
+    var last: ?usize = null;
+    for (positions.items) |pos| {
+        if (last == null or pos != last.?) {
+            try dedup.append(pos);
+            last = pos;
+        }
+    }
+    return dedup.toOwnedSlice();
 }
 
 fn cursorColumn(win: vaxis.Window, prompt: []const u8, display: []const u8, subdir_mode: bool, state: AppState) u16 {

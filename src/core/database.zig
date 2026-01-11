@@ -143,20 +143,36 @@ pub const Database = struct {
 
     pub fn search(self: *Database, allocator: std.mem.Allocator, query: []const u8, limit: usize) ![]Entry {
         const all = try self.getAll(allocator);
-        if (query.len == 0) return all;
+        var terms = std.ArrayList([]const u8).init(allocator);
+        defer terms.deinit();
+        var tok = std.mem.tokenizeAny(u8, query, " \t\r\n");
+        while (tok.next()) |term| {
+            if (term.len > 0) try terms.append(term);
+        }
+        if (terms.items.len == 0) return all;
         defer allocator.free(all);
 
         var matches = std.ArrayList(ScoredEntry).init(allocator);
         defer matches.deinit();
 
         for (all) |entry| {
-            const match = try matcher.fuzzyMatch(allocator, query, entry.path);
-            if (match) |m| {
+            var combined: i32 = 0;
+            var matched = true;
+            for (terms.items) |term| {
+                const match = try matcher.fuzzyMatch(allocator, term, entry.path);
+                if (match) |m| {
+                    combined += m.score;
+                    allocator.free(m.positions);
+                } else {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) {
                 try matches.append(.{
                     .entry = entry,
-                    .score = entry.score + @as(f64, @floatFromInt(m.score)),
+                    .score = entry.score + @as(f64, @floatFromInt(combined)),
                 });
-                allocator.free(m.positions);
             } else {
                 allocator.free(entry.path);
             }
