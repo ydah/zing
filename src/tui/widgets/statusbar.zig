@@ -1,3 +1,7 @@
 pub const StatusBar = struct {
-    pub fn render() void {}
+    text: []const u8 = "",
+
+    pub fn render(self: *StatusBar) void {
+        _ = self;
+    }
 };

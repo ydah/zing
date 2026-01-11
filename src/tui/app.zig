@@ -1,6 +1,7 @@
 const std = @import("std");
 const Database = @import("../core/database.zig").Database;
-const Theme = @import("theme.zig").Theme;
+const theme_mod = @import("theme.zig");
+const Theme = theme_mod.Theme;
 
 pub const Mode = enum {
     list,
@@ -14,6 +15,8 @@ pub const AppState = struct {
     results: []SearchResult,
     selected_index: usize = 0,
     scroll_offset: usize = 0,
+    last_input_ns: u64 = 0,
+    last_search_ns: u64 = 0,
 
     pub fn init(allocator: std.mem.Allocator) AppState {
         return .{
@@ -33,19 +36,22 @@ pub const SearchResult = struct {
 };
 
 pub const App = struct {
+    allocator: std.mem.Allocator,
     db: *Database,
     state: AppState,
     theme: Theme,
 
     pub fn init(allocator: std.mem.Allocator, db: *Database) !App {
         return .{
+            .allocator = allocator,
             .db = db,
             .state = AppState.init(allocator),
-            .theme = Theme.default,
+            .theme = try theme_mod.loadTheme(allocator, ""),
         };
     }
 
     pub fn deinit(self: *App) void {
+        self.freeResults();
         self.state.deinit();
     }
 
@@ -54,8 +60,8 @@ pub const App = struct {
     }
 
     pub fn handleKeyEvent(self: *App, key: u32) bool {
-        _ = self;
         _ = key;
+        self.state.last_input_ns = std.time.nanoTimestamp();
         return false;
     }
 
@@ -86,6 +92,35 @@ pub const App = struct {
     }
 
     pub fn updateSearch(self: *App) !void {
-        _ = self;
+        const now = std.time.nanoTimestamp();
+        if (self.state.last_input_ns == 0) return;
+        if (now - self.state.last_input_ns < 100 * std.time.ns_per_ms) return;
+        if (self.state.last_search_ns != 0 and self.state.last_search_ns >= self.state.last_input_ns) return;
+
+        const query = self.state.query.items;
+        const results = try self.db.search(self.allocator, query, 100);
+        self.freeResults();
+        self.state.results = try toSearchResults(self.allocator, results);
+        self.state.last_search_ns = now;
+    }
+
+    fn freeResults(self: *App) void {
+        for (self.state.results) |result| {
+            self.allocator.free(result.path);
+        }
+        self.allocator.free(self.state.results);
+        self.state.results = &.{};
     }
 };
+
+fn toSearchResults(allocator: std.mem.Allocator, entries: []const @import("../core/database.zig").Entry) ![]SearchResult {
+    var results = try allocator.alloc(SearchResult, entries.len);
+    for (entries, 0..) |entry, idx| {
+        results[idx] = .{
+            .path = entry.path,
+            .score = entry.score,
+        };
+    }
+    allocator.free(entries);
+    return results;
+}

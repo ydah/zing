@@ -15,26 +15,55 @@ pub const ListView = struct {
     }
 
     pub fn moveUp(self: *ListView) void {
-        _ = self;
+        if (self.selected == 0) return;
+        self.selected -= 1;
+        self.ensureVisible();
     }
 
     pub fn moveDown(self: *ListView) void {
-        _ = self;
+        if (self.items.len == 0) return;
+        if (self.selected + 1 >= self.items.len) return;
+        self.selected += 1;
+        self.ensureVisible();
     }
 
     pub fn pageUp(self: *ListView) void {
-        _ = self;
+        if (self.height == 0) return;
+        if (self.selected == 0) return;
+        const delta = @min(self.selected, self.height);
+        self.selected -= delta;
+        self.ensureVisible();
     }
 
     pub fn pageDown(self: *ListView) void {
-        _ = self;
+        if (self.height == 0 or self.items.len == 0) return;
+        const remaining = self.items.len - 1 - self.selected;
+        const delta = @min(remaining, self.height);
+        self.selected += delta;
+        self.ensureVisible();
     }
 
     pub fn home(self: *ListView) void {
-        _ = self;
+        if (self.items.len == 0) return;
+        self.selected = 0;
+        self.ensureVisible();
     }
 
     pub fn end(self: *ListView) void {
-        _ = self;
+        if (self.items.len == 0) return;
+        self.selected = self.items.len - 1;
+        self.ensureVisible();
+    }
+
+    fn ensureVisible(self: *ListView) void {
+        if (self.height == 0) return;
+        if (self.selected < self.scroll_offset) {
+            self.scroll_offset = self.selected;
+            return;
+        }
+        const last_visible = self.scroll_offset + self.height - 1;
+        if (self.selected > last_visible) {
+            self.scroll_offset = self.selected - (self.height - 1);
+        }
     }
 };
