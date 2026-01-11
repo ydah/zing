@@ -1,0 +1,11 @@
+.{
+    .name = .libvaxis,
+    .version = "0.0.0",
+    .fingerprint = 0x6bad8173612af013,
+    .minimum_zig_version = "0.15.2",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

@@ -1,0 +1,20 @@
+.{
+    .name = .zing,
+    .version = "0.0.0",
+    .fingerprint = 0x4a68dd9915cafa64,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .libvaxis = .{
+            .path = "vendor/libvaxis",
+        },
+        .@"sqlite-zig" = .{
+            .url = "https://github.com/vrischmann/zig-sqlite/archive/0b75ba276d34de3141ec1697e3ef7c836d7b38e7.tar.gz",
+            .hash = "sqlite-3.48.0-F2R_a8eODgD9X8XjvWlZ1K7C-tDuHae4FuShM2N-yIT2",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
