@@ -180,6 +180,27 @@ pub const Database = struct {
         try execWithRetry(&self.conn, query, .{ .min_score = min_score });
     }
 
+    pub fn mergeImport(self: *Database, path: []const u8, score: f64, last_access: i64, access_count: i64) !void {
+        const query =
+            \\INSERT INTO directories (path, score, last_access, access_count, created_at)
+            \\VALUES (:path, :score, :last_access, :access_count, :created_at)
+            \\ON CONFLICT(path) DO UPDATE SET
+            \\  score = directories.score + excluded.score,
+            \\  last_access = CASE
+            \\    WHEN excluded.last_access > directories.last_access THEN excluded.last_access
+            \\    ELSE directories.last_access
+            \\  END,
+            \\  access_count = directories.access_count + excluded.access_count
+        ;
+        try execWithRetry(&self.conn, query, .{
+            .path = path,
+            .score = score,
+            .last_access = last_access,
+            .access_count = access_count,
+            .created_at = std.time.timestamp(),
+        });
+    }
+
     pub fn beginTransaction(self: *Database) !void {
         try execWithRetry(&self.conn, "BEGIN", .{});
     }

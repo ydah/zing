@@ -1,8 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const cli = @import("cli.zig");
+const config_mod = @import("core/config.zig");
 const Database = @import("core/database.zig").Database;
+const import_mod = @import("core/import.zig");
 const shell_init = @import("shell/init.zig");
+const sparkline = @import("tui/widgets/sparkline.zig");
 
 const CommandError = error{
     MissingArgument,
@@ -63,11 +66,16 @@ fn withDb(
 }
 
 fn handleQuery(args: cli.Args, db: *Database) !void {
-    const query = try joinArgs(std.heap.page_allocator, args.positional);
-    defer std.heap.page_allocator.free(query);
+    const parsed = try parseSubdirQuery(std.heap.page_allocator, args.positional);
+    defer std.heap.page_allocator.free(parsed.query);
+    if (parsed.sub_query) |sub_query| {
+        defer std.heap.page_allocator.free(sub_query);
+        try handleSubdirQuery(db, parsed.query, sub_query);
+        return;
+    }
 
     const limit = args.flags.limit orelse 1;
-    const results = try db.search(std.heap.page_allocator, query, limit);
+    const results = try db.search(std.heap.page_allocator, parsed.query, limit);
     defer freeEntries(std.heap.page_allocator, results);
 
     if (results.len == 0) return;
@@ -138,13 +146,54 @@ fn handleList(args: cli.Args, db: *Database) !void {
 
 fn handleStats(args: cli.Args, db: *Database) !void {
     _ = args;
-    _ = db;
-    std.log.warn("stats mode is not implemented yet", .{});
+    const entries = try db.getAll(std.heap.page_allocator);
+    defer freeEntries(std.heap.page_allocator, entries);
+
+    const now = std.time.timestamp();
+    const day_seconds: i64 = 86400;
+    const start_today = now - @mod(now, day_seconds);
+
+    var total_visits: i64 = 0;
+    var unique_today: usize = 0;
+    var activity = [_]f64{0} ** 7;
+
+    for (entries) |entry| {
+        total_visits += entry.access_count;
+        if (entry.last_access >= start_today) unique_today += 1;
+        if (entry.last_access <= now) {
+            const days_ago = @as(i64, @intCast((now - entry.last_access) / day_seconds));
+            if (days_ago >= 0 and days_ago < 7) {
+                const idx = @as(usize, @intCast(6 - days_ago));
+                activity[idx] += 1.0;
+            }
+        }
+    }
+
+    const spark = try sparkline.renderSparkline(std.heap.page_allocator, &activity);
+    defer std.heap.page_allocator.free(spark);
+
+    const out = std.io.getStdOut().writer();
+    try out.print("Total directories: {d}\n", .{entries.len});
+    try out.print("Total visits: {d}\n", .{total_visits});
+    try out.print("Unique today: {d}\n", .{unique_today});
+    try out.print("Activity (7 days): {s}\n", .{spark});
 }
 
 fn handleConfig(args: cli.Args) !void {
-    _ = args;
-    std.log.warn("config command is not implemented yet", .{});
+    var cfg = try config_mod.Config.load(std.heap.page_allocator);
+    defer cfg.deinit();
+
+    if (args.positional.len == 0) {
+        try cfg.writeTo(std.io.getStdOut().writer());
+        return;
+    }
+    if (std.mem.eql(u8, args.positional[0], "set")) {
+        if (args.positional.len < 3) return CommandError.MissingArgument;
+        try cfg.setValue(args.positional[1], args.positional[2]);
+        try cfg.write();
+        return;
+    }
+    return CommandError.InvalidArgument;
 }
 
 fn handleInit(args: cli.Args) !void {
@@ -159,9 +208,15 @@ fn handleInit(args: cli.Args) !void {
 }
 
 fn handleImport(args: cli.Args, db: *Database) !void {
-    _ = args;
-    _ = db;
-    std.log.warn("import command is not implemented yet", .{});
+    const source = args.flags.from orelse return CommandError.MissingArgument;
+    const path = if (args.positional.len > 0) args.positional[0] else null;
+    const mapped = switch (source) {
+        .zoxide => import_mod.ImportSource.zoxide,
+        .z => import_mod.ImportSource.z,
+        .autojump => import_mod.ImportSource.autojump,
+    };
+    const result = try import_mod.importData(std.heap.page_allocator, db, mapped, path);
+    try std.io.getStdOut().writer().print("imported {d} entries\n", .{result.count});
 }
 
 fn handleHelp() void {
@@ -182,6 +237,65 @@ fn freeEntries(allocator: std.mem.Allocator, entries: []const @import("core/data
         allocator.free(entry.path);
     }
     allocator.free(entries);
+}
+
+fn parseSubdirQuery(allocator: std.mem.Allocator, parts: [][]const u8) !struct {
+    query: []u8,
+    sub_query: ?[]u8,
+} {
+    var base = std.ArrayList([]const u8).init(allocator);
+    defer base.deinit();
+    var sub_query: ?[]u8 = null;
+    for (parts) |part| {
+        if (std.mem.startsWith(u8, part, "/")) {
+            sub_query = try allocator.dupe(u8, part[1..]);
+            break;
+        }
+        try base.append(part);
+    }
+    return .{
+        .query = try std.mem.join(allocator, " ", base.items),
+        .sub_query = sub_query,
+    };
+}
+
+fn handleSubdirQuery(db: *Database, query: []const u8, sub_query: []const u8) !void {
+    const results = try db.search(std.heap.page_allocator, query, 1);
+    defer freeEntries(std.heap.page_allocator, results);
+    if (results.len == 0) return;
+    const base = results[0].path;
+    if (sub_query.len == 0) {
+        try std.io.getStdOut().writer().print("{s}\n", .{base});
+        return;
+    }
+
+    const best = try findBestSubdir(std.heap.page_allocator, base, sub_query);
+    defer if (best) |p| std.heap.page_allocator.free(p);
+    if (best) |path| {
+        try std.io.getStdOut().writer().print("{s}\n", .{path});
+    }
+}
+
+fn findBestSubdir(allocator: std.mem.Allocator, base: []const u8, query: []const u8) !?[]u8 {
+    var dir = std.fs.cwd().openDir(base, .{ .iterate = true }) catch return null;
+    defer dir.close();
+
+    var best_score: i32 = std.math.minInt(i32);
+    var best_path: ?[]u8 = null;
+    var it = dir.iterate();
+    while (try it.next()) |entry| {
+        if (entry.kind != .directory) continue;
+        const match = try @import("core/matcher.zig").fuzzyMatch(allocator, query, entry.name);
+        if (match) |m| {
+            if (m.score > best_score) {
+                if (best_path) |prev| allocator.free(prev);
+                best_score = m.score;
+                best_path = try std.fs.path.join(allocator, &.{ base, entry.name });
+            }
+            allocator.free(m.positions);
+        }
+    }
+    return best_path;
 }
 
 fn parseShellName(name: []const u8) ?cli.Shell {

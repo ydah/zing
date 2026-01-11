@@ -2,7 +2,9 @@ const std = @import("std");
 
 pub const cli = @import("cli.zig");
 pub const core_database = @import("core/database.zig");
+pub const core_config = @import("core/config.zig");
 pub const core_frecency = @import("core/frecency.zig");
+pub const core_import = @import("core/import.zig");
 pub const core_matcher = @import("core/matcher.zig");
 pub const core_path = @import("core/path.zig");
 pub const tui_app = @import("tui/app.zig");
