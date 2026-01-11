@@ -78,4 +78,5 @@ patterns = ["^/tmp", ".*/node_modules/.*"]
 
 - TUI is functional for list/preview/tree/stats, but rendering is still minimal.
 - TUI subdirectory mode: press `/` to enter, `Backspace` on empty to exit.
+- TUI preview paging: `Alt+Left/Right` to scroll preview grid.
 - zoxide binary `db.zo` import uses the `zoxide` CLI if available; text-format exports also work.
