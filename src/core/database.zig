@@ -290,6 +290,9 @@ fn execWithRetry(db: *sqlite.Db, comptime query: []const u8, values: anytype) !v
     var attempts: u8 = 0;
     while (true) : (attempts += 1) {
         db.exec(query, .{}, values) catch |err| {
+            if (err == error.ExecReturnedData) {
+                return;
+            }
             if (isBusy(err) and attempts < 5) {
                 std.Thread.sleep(50 * std.time.ns_per_ms);
                 continue;
