@@ -236,8 +236,8 @@ pub const Database = struct {
     }
 
     fn initSchema(self: *Database) !void {
-        try execWithRetry(&self.conn, "PRAGMA journal_mode=WAL", .{});
-        try execWithRetry(&self.conn, "PRAGMA synchronous=NORMAL", .{});
+        try pragmaWithRetry(&self.conn, "journal_mode", "WAL");
+        try pragmaWithRetry(&self.conn, "synchronous", "NORMAL");
         const schema =
             \\CREATE TABLE IF NOT EXISTS directories (
             \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -293,6 +293,20 @@ fn execWithRetry(db: *sqlite.Db, comptime query: []const u8, values: anytype) !v
             if (err == error.ExecReturnedData) {
                 return;
             }
+            if (isBusy(err) and attempts < 5) {
+                std.Thread.sleep(50 * std.time.ns_per_ms);
+                continue;
+            }
+            return err;
+        };
+        return;
+    }
+}
+
+fn pragmaWithRetry(db: *sqlite.Db, comptime name: []const u8, comptime value: ?[]const u8) !void {
+    var attempts: u8 = 0;
+    while (true) : (attempts += 1) {
+        _ = db.pragma(void, .{}, name, value) catch |err| {
             if (isBusy(err) and attempts < 5) {
                 std.Thread.sleep(50 * std.time.ns_per_ms);
                 continue;

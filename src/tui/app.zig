@@ -56,6 +56,7 @@ pub const App = struct {
     preview: PreviewPane,
     tree: TreeView,
     accepted: bool = false,
+    frame_arena: std.heap.ArenaAllocator,
 
     pub fn init(allocator: std.mem.Allocator, db: *Database) !App {
         return .{
@@ -65,6 +66,7 @@ pub const App = struct {
             .theme = try theme_mod.loadTheme(allocator, ""),
             .preview = .{},
             .tree = TreeView.init(allocator),
+            .frame_arena = std.heap.ArenaAllocator.init(allocator),
         };
     }
 
@@ -74,6 +76,7 @@ pub const App = struct {
         self.tree.deinit();
         if (self.state.subdir_base) |base| self.allocator.free(base);
         self.state.deinit();
+        self.frame_arena.deinit();
     }
 
     pub fn run(self: *App) !?[]u8 {
@@ -227,7 +230,7 @@ pub const App = struct {
             } else {
                 self.state.searchbar.deleteWord();
             }
-        } else if (key.matchShortcut('t', .{ .ctrl = true }) or key.matches('\t', .{})) {
+        } else if (key.matches('\t', .{})) {
             self.state.mode = switch (self.state.mode) {
                 .list => .tree,
                 .tree => .stats,
@@ -259,6 +262,7 @@ pub const App = struct {
     }
 
     pub fn renderFrame(self: *App, vx: *vaxis.Vaxis, tty: *vaxis.Tty) void {
+        _ = self.frame_arena.reset(.retain_capacity);
         const win = vx.window();
         win.clear();
         win.hideCursor();
@@ -365,6 +369,7 @@ pub const App = struct {
     }
 
     pub fn renderSearchBar(self: *App, win: vaxis.Window) void {
+        const frame_alloc = self.frame_arena.allocator();
         const prompt = if (self.state.subdir_mode)
             "📁 Subdir: "
         else
@@ -375,13 +380,11 @@ pub const App = struct {
             self.state.searchbar.getQuery();
         var display = query;
         if (self.state.subdir_mode and self.state.subdir_base != null) {
-            const crumbs = formatBreadcrumbs(self.allocator, self.state.subdir_base.?) catch null;
+            const crumbs = formatBreadcrumbs(frame_alloc, self.state.subdir_base.?) catch null;
             if (crumbs) |crumbs_buf| {
-                defer self.allocator.free(crumbs_buf);
-                display = std.fmt.allocPrint(self.allocator, "{s} {s}", .{ crumbs_buf, query }) catch display;
+                display = std.fmt.allocPrint(frame_alloc, "{s} {s}", .{ crumbs_buf, query }) catch display;
             }
         }
-        defer if (display.ptr != query.ptr) self.allocator.free(display);
         const segments = [_]vaxis.Segment{
             .{
                 .text = prompt,
@@ -408,6 +411,7 @@ pub const App = struct {
             return;
         }
 
+        const frame_alloc = self.frame_arena.allocator();
         const height: usize = win.height;
         if (height == 0) return;
         const total = self.state.results.len;
@@ -437,17 +441,15 @@ pub const App = struct {
             else
                 styleFromTheme(self.theme.match_highlight, null, true);
 
-            var segments = std.array_list.Managed(vaxis.Segment).init(self.allocator);
+            var segments = std.array_list.Managed(vaxis.Segment).init(frame_alloc);
             defer segments.deinit();
             appendHighlightedSegments(self.allocator, &segments, entry.path, entry.match_positions, base_style, match_style) catch {};
 
-            const bar = scoreBar(self.allocator, entry.score, max_score, 10) catch "";
-            defer if (bar.len > 0) self.allocator.free(bar);
+            const bar = scoreBar(frame_alloc, entry.score, max_score, 10) catch "";
             segments.append(.{ .text = "  ", .style = base_style }) catch {};
             segments.append(.{ .text = bar, .style = styleFromTheme(self.theme.score_bar, bg_color, false) }) catch {};
 
-            const score_text = std.fmt.allocPrint(self.allocator, "  {d:.2}", .{entry.score}) catch "";
-            defer if (score_text.len > 0) self.allocator.free(score_text);
+            const score_text = std.fmt.allocPrint(frame_alloc, "  {d:.2}", .{entry.score}) catch "";
             if (score_text.len > 0) {
                 segments.append(.{ .text = score_text, .style = base_style }) catch {};
             }
@@ -458,13 +460,13 @@ pub const App = struct {
     }
 
     pub fn renderPreview(self: *App, win: vaxis.Window) void {
+        const frame_alloc = self.frame_arena.allocator();
         const selected = self.selectedPath() orelse return;
         if (self.preview.path == null or !std.mem.eql(u8, self.preview.path.?, selected)) {
             self.preview.loadDirectory(self.allocator, selected) catch {};
         }
 
-        const header = std.fmt.allocPrint(self.allocator, "📁 Preview: {s}", .{selected}) catch return;
-        defer self.allocator.free(header);
+        const header = std.fmt.allocPrint(frame_alloc, "📁 Preview: {s}", .{selected}) catch return;
         const header_seg = vaxis.Segment{
             .text = header,
             .style = styleFromTheme(self.theme.secondary, null, true),
@@ -488,10 +490,9 @@ pub const App = struct {
             const entry = self.preview.entries[idx];
             if (row >= win.height) break;
             const name = if (entry.kind == .directory)
-                std.fmt.allocPrint(self.allocator, "{s}/", .{entry.name}) catch entry.name
+                std.fmt.allocPrint(frame_alloc, "{s}/", .{entry.name}) catch entry.name
             else
                 entry.name;
-            defer if (name.ptr != entry.name.ptr) self.allocator.free(name);
             const seg = vaxis.Segment{ .text = name, .style = styleFromTheme(self.theme.text_secondary, null, false) };
             _ = win.print(&.{seg}, .{ .row_offset = row, .col_offset = col * col_width, .wrap = .none });
             col += 1;
@@ -552,45 +553,42 @@ pub const App = struct {
     }
 
     fn renderTree(self: *App, win: vaxis.Window) void {
-        const nodes = self.tree.visibleList();
+        const frame_alloc = self.frame_arena.allocator();
+        const nodes = self.tree.visibleList() catch return;
         defer self.allocator.free(nodes);
         const max_score = treeMaxScore(nodes);
         var row: u16 = 0;
         for (nodes) |node| {
             if (row >= win.height) break;
             const indent_len = node.depth * 2;
-            const indent_buf = self.allocator.alloc(u8, indent_len) catch null;
+            const indent_buf = frame_alloc.alloc(u8, indent_len) catch null;
             const indent = if (indent_buf) |buf| blk: {
                 @memset(buf, ' ');
                 break :blk buf;
             } else "";
-            defer if (indent_buf) |buf| self.allocator.free(buf);
             const has_children = node.children.len > 0;
             const expanded = has_children and self.tree.expanded.contains(node);
             const glyph = if (!has_children) " " else if (expanded) "▾" else "▸";
             const name = if (node.name.len == 0) "/" else node.name;
             const line = std.fmt.allocPrint(
-                self.allocator,
+                frame_alloc,
                 "{s}{s} {s}",
                 .{ indent, glyph, name },
             ) catch "";
-            defer if (line.len > 0) self.allocator.free(line);
             const selected = self.tree.selected == node;
             const style = if (selected)
                 styleFromTheme(self.theme.text_primary, self.theme.bg_highlight, true)
             else
                 styleFromTheme(self.theme.text_primary, null, false);
-            var segments = std.array_list.Managed(vaxis.Segment).init(self.allocator);
+            var segments = std.array_list.Managed(vaxis.Segment).init(frame_alloc);
             defer segments.deinit();
             segments.append(.{ .text = line, .style = style }) catch {};
 
-            const bar = scoreBar(self.allocator, node.score, max_score, 8) catch "";
-            defer if (bar.len > 0) self.allocator.free(bar);
+            const bar = scoreBar(frame_alloc, node.score, max_score, 8) catch "";
             segments.append(.{ .text = "  ", .style = style }) catch {};
             segments.append(.{ .text = bar, .style = styleFromTheme(self.theme.score_bar, null, false) }) catch {};
 
-            const score_text = std.fmt.allocPrint(self.allocator, "  {d:.1}", .{node.score}) catch "";
-            defer if (score_text.len > 0) self.allocator.free(score_text);
+            const score_text = std.fmt.allocPrint(frame_alloc, "  {d:.1}", .{node.score}) catch "";
             if (score_text.len > 0) {
                 segments.append(.{ .text = score_text, .style = style }) catch {};
             }
@@ -601,6 +599,7 @@ pub const App = struct {
     }
 
     fn renderStats(self: *App, win: vaxis.Window) void {
+        const frame_alloc = self.frame_arena.allocator();
         const entries = self.db.getAll(self.allocator) catch return;
         defer freeEntries(self.allocator, entries);
 
@@ -624,20 +623,14 @@ pub const App = struct {
             }
         }
 
-        const spark = @import("widgets/sparkline.zig").renderSparkline(self.allocator, &activity) catch "";
-        defer if (spark.len > 0) self.allocator.free(spark);
+        const spark = @import("widgets/sparkline.zig").renderSparkline(frame_alloc, &activity) catch "";
 
         const lines = [_][]const u8{
-            std.fmt.allocPrint(self.allocator, "Total directories: {d}", .{entries.len}) catch "",
-            std.fmt.allocPrint(self.allocator, "Total visits: {d}", .{total_visits}) catch "",
-            std.fmt.allocPrint(self.allocator, "Unique today: {d}", .{unique_today}) catch "",
-            std.fmt.allocPrint(self.allocator, "Activity: {s}", .{spark}) catch "",
+            std.fmt.allocPrint(frame_alloc, "Total directories: {d}", .{entries.len}) catch "",
+            std.fmt.allocPrint(frame_alloc, "Total visits: {d}", .{total_visits}) catch "",
+            std.fmt.allocPrint(frame_alloc, "Unique today: {d}", .{unique_today}) catch "",
+            std.fmt.allocPrint(frame_alloc, "Activity: {s}", .{spark}) catch "",
         };
-        defer {
-            for (lines) |line| {
-                if (line.len > 0) self.allocator.free(line);
-            }
-        }
 
         var row: u16 = 0;
         for (lines) |line| {
