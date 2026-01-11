@@ -174,22 +174,22 @@ pub const App = struct {
         } else if (key.matches(vaxis.Key.left, .{})) {
             if (self.state.mode == .tree) {
                 self.tree.collapse();
+            } else if (self.state.mode == .list and mods.alt) {
+                if (self.preview.scroll_offset > 0) self.preview.scroll_offset -= 1;
+            } else if (mods.ctrl) {
+                self.state.searchbar.moveCursorWordLeft();
             } else {
-                if (mods.ctrl) {
-                    self.state.searchbar.moveCursorWordLeft();
-                } else {
-                    self.state.searchbar.moveCursorLeft();
-                }
+                self.state.searchbar.moveCursorLeft();
             }
         } else if (key.matches(vaxis.Key.right, .{})) {
             if (self.state.mode == .tree) {
                 self.tree.expand();
+            } else if (self.state.mode == .list and mods.alt) {
+                self.preview.scroll_offset += 1;
+            } else if (mods.ctrl) {
+                self.state.searchbar.moveCursorWordRight();
             } else {
-                if (mods.ctrl) {
-                    self.state.searchbar.moveCursorWordRight();
-                } else {
-                    self.state.searchbar.moveCursorRight();
-                }
+                self.state.searchbar.moveCursorRight();
             }
         } else if (key.matches(vaxis.Key.backspace, .{})) {
             if (self.state.subdir_mode) {
@@ -396,9 +396,19 @@ pub const App = struct {
 
         const col_width: u16 = 24;
         const columns = @max(@as(u16, 1), win.width / col_width);
+        const visible_rows = if (win.height > 1) win.height - 1 else 0;
+        const rows_per_page = @max(@as(usize, 1), @as(usize, visible_rows));
+        const items_per_page = rows_per_page * @as(usize, columns);
+        var start_index: usize = 0;
+        if (items_per_page > 0) {
+            start_index = @min(self.preview.scroll_offset * items_per_page, self.preview.entries.len);
+        }
         var row: u16 = 1;
         var col: u16 = 0;
-        for (self.preview.entries) |entry| {
+        var idx: usize = start_index;
+        while (idx < self.preview.entries.len) : (idx += 1) {
+            if (row > win.height -| 1) break;
+            const entry = self.preview.entries[idx];
             if (row >= win.height) break;
             const name = if (entry.kind == .directory)
                 std.fmt.allocPrint(self.allocator, "{s}/", .{entry.name}) catch entry.name
@@ -412,6 +422,7 @@ pub const App = struct {
                 col = 0;
                 row += 1;
             }
+            if (idx - start_index + 1 >= items_per_page) break;
         }
     }
 
