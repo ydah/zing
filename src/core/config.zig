@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// Application configuration loaded from TOML and defaults.
 pub const Config = struct {
     arena: std.heap.ArenaAllocator,
     general: General,
@@ -152,12 +153,14 @@ pub const Config = struct {
     }
 };
 
+/// General settings.
 pub const General = struct {
     data_dir: []const u8,
     cmd_alias: []const u8,
     interactive_alias: []const u8,
 };
 
+/// Scoring configuration for frecency and matching weight.
 pub const Scoring = struct {
     half_life: f64,
     match_weight: f64,
@@ -165,11 +168,13 @@ pub const Scoring = struct {
     min_score: f64,
 };
 
+/// Matching behavior settings.
 pub const Matching = struct {
     case_sensitivity: []const u8,
     search_type: []const u8,
 };
 
+/// TUI display settings.
 pub const Tui = struct {
     theme: []const u8,
     show_preview: bool,
@@ -177,6 +182,7 @@ pub const Tui = struct {
     highlight_matches: bool,
 };
 
+/// Exclusion patterns.
 pub const Exclude = struct {
     patterns: [][]const u8,
 };
@@ -259,4 +265,35 @@ fn parseBool(value: []const u8) !bool {
 
 fn boolLiteral(value: bool) []const u8 {
     return if (value) "true" else "false";
+}
+
+test "config setValue updates fields" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var cfg = try Config.load(allocator);
+    defer cfg.deinit();
+
+    try cfg.setValue("general.data_dir", "/tmp/zing");
+    try cfg.setValue("scoring.half_life", "42");
+    try cfg.setValue("tui.show_preview", "false");
+
+    try std.testing.expect(std.mem.eql(u8, cfg.general.data_dir, "/tmp/zing"));
+    try std.testing.expectEqual(@as(f64, 42.0), cfg.scoring.half_life);
+    try std.testing.expectEqual(false, cfg.tui.show_preview);
+}
+
+test "config parse string array" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const patterns = parseStringArray(allocator, "[\"a\", \"b\"]") orelse return error.TestExpectedEqual;
+    defer allocator.free(patterns);
+    for (patterns) |p| allocator.free(p);
+
+    try std.testing.expectEqual(@as(usize, 2), patterns.len);
+    try std.testing.expect(std.mem.eql(u8, patterns[0], "a"));
+    try std.testing.expect(std.mem.eql(u8, patterns[1], "b"));
 }

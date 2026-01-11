@@ -1,0 +1,88 @@
+.TH ZING 1 "" "zing" "User Commands"
+.SH NAME
+zing \- modern directory jumper
+.SH SYNOPSIS
+.B zing
+.RI [ command ]
+.RI [ options ]
+.RI [ args ]
+.br
+.B z
+.RI <query>
+.br
+.B zi
+.RI [ query ]
+.SH DESCRIPTION
+zing tracks directory visits and jumps to frequently and recently used paths.
+.SH COMMANDS
+.TP
+.B query
+Run a query and print the best match.
+.TP
+.B interactive
+Launch the TUI selector (currently stubbed).
+.TP
+.B add
+Add a path to the database.
+.TP
+.B remove
+Remove a path from the database.
+.TP
+.B list
+List stored directories.
+.TP
+.B stats
+Show statistics summary.
+.TP
+.B config
+Show or update configuration.
+.TP
+.B init
+Print shell integration script.
+.TP
+.B import
+Import data from other tools.
+.SH OPTIONS
+.TP
+.BR -h , " " --help
+Show help.
+.TP
+.BR -V , " " --version
+Show version.
+.TP
+.B --no-tui
+Disable TUI output.
+.TP
+.BI --threshold= N
+Minimum score threshold.
+.TP
+.BI --limit= N
+Max number of results.
+.TP
+.BI --format= json|text
+List output format.
+.TP
+.BI --from= zoxide|z|autojump
+Import source.
+.TP
+.BI --shell= bash|zsh|fish
+Shell type for init.
+.SH FILES
+.TP
+.I ~/.local/share/zing/zing.db
+Database file.
+.TP
+.I ~/.config/zing/config.toml
+Configuration file.
+.SH EXAMPLES
+.TP
+.B z proj
+Jump to best match.
+.TP
+.B zing list --format=json
+List entries as JSON.
+.TP
+.B zing config set tui.theme dracula
+Set theme.
+.SH AUTHOR
+zing contributors

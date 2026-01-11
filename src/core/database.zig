@@ -2,6 +2,7 @@ const std = @import("std");
 const sqlite = @import("sqlite");
 const matcher = @import("matcher.zig");
 
+/// Database entry for a tracked directory.
 pub const Entry = struct {
     path: []const u8,
     score: f64,
@@ -10,6 +11,7 @@ pub const Entry = struct {
     created_at: i64,
 };
 
+/// SQLite-backed storage for frecency scores and history.
 pub const Database = struct {
     allocator: std.mem.Allocator,
     path: []const u8,
@@ -214,6 +216,8 @@ pub const Database = struct {
     }
 
     fn initSchema(self: *Database) !void {
+        try execWithRetry(&self.conn, "PRAGMA journal_mode=WAL", .{});
+        try execWithRetry(&self.conn, "PRAGMA synchronous=NORMAL", .{});
         const schema =
             \\CREATE TABLE IF NOT EXISTS directories (
             \\  id INTEGER PRIMARY KEY AUTOINCREMENT,
