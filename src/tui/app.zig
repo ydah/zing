@@ -316,6 +316,9 @@ pub const App = struct {
             },
         };
         _ = win.print(&segments, .{ .row_offset = 0, .col_offset = 0 });
+
+        const cursor_col = cursorColumn(win, prompt, display, self.state.subdir_mode, self.state);
+        win.showCursor(cursor_col, 0);
     }
 
     pub fn renderResults(self: *App, win: vaxis.Window) void {
@@ -782,4 +785,40 @@ fn treeMaxScore(nodes: [](*TreeNode)) f64 {
         if (node.score > max_score) max_score = node.score;
     }
     return max_score;
+}
+
+fn cursorColumn(win: vaxis.Window, prompt: []const u8, display: []const u8, subdir_mode: bool, state: AppState) u16 {
+    const prompt_width = textWidth(win, prompt);
+    if (!subdir_mode) {
+        const cursor_width = textWidth(win, display[0..@min(state.searchbar.cursor_pos, display.len)]);
+        return clampCursor(win, prompt_width + cursor_width);
+    }
+
+    // Subdir mode: display may include breadcrumbs + space + query.
+    const query = state.subdir_bar.getQuery();
+    if (display.len == query.len) {
+        const cursor_width = textWidth(win, display[0..@min(state.subdir_bar.cursor_pos, display.len)]);
+        return clampCursor(win, prompt_width + cursor_width);
+    }
+
+    const query_prefix_len = @min(state.subdir_bar.cursor_pos, query.len);
+    const prefix_len = if (display.len >= query.len) display.len - query.len else display.len;
+    const total_len = @min(display.len, prefix_len + query_prefix_len);
+    const cursor_width = textWidth(win, display[0..total_len]);
+    return clampCursor(win, prompt_width + cursor_width);
+}
+
+fn clampCursor(win: vaxis.Window, col: u16) u16 {
+    if (win.width == 0) return 0;
+    return @min(col, win.width - 1);
+}
+
+fn textWidth(win: vaxis.Window, text: []const u8) u16 {
+    var width: u16 = 0;
+    var iter = vaxis.unicode.graphemeIterator(text);
+    while (iter.next()) |g| {
+        const bytes = g.bytes(text);
+        width +|= win.gwidth(bytes);
+    }
+    return width;
 }
