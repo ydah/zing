@@ -83,9 +83,21 @@ fn handleQuery(args: cli.Args, db: *Database) !void {
 }
 
 fn handleInteractive(args: cli.Args, db: *Database) !void {
-    _ = args;
-    _ = db;
-    std.log.warn("interactive mode is not implemented yet", .{});
+    var app = try @import("tui/app.zig").App.init(std.heap.page_allocator, db);
+    defer app.deinit();
+
+    if (args.positional.len > 0) {
+        for (args.positional) |part| {
+            app.state.searchbar.insertText(part);
+            app.state.searchbar.insertChar(' ');
+        }
+    }
+
+    const selected = try app.run();
+    if (selected) |path| {
+        defer std.heap.page_allocator.free(path);
+        try std.io.getStdOut().writer().print("{s}\n", .{path});
+    }
 }
 
 fn handleAdd(args: cli.Args, db: *Database) !void {

@@ -5,7 +5,8 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .libvaxis = .{
-            .path = "vendor/libvaxis",
+            .url = "https://github.com/rockorager/libvaxis/archive/75035b169e91a51c233f3742161f8eb8eafca659.tar.gz",
+            .hash = "vaxis-0.5.1-BWNV_IE-CQBYmSf_boEKUyv6den0Gmj5LksxvdCx2pBL",
         },
         .@"sqlite-zig" = .{
             .url = "https://github.com/vrischmann/zig-sqlite/archive/0b75ba276d34de3141ec1697e3ef7c836d7b38e7.tar.gz",

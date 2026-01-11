@@ -18,6 +18,12 @@ pub const SearchBar = struct {
         self.cursor_pos += 1;
     }
 
+    pub fn insertText(self: *SearchBar, text: []const u8) void {
+        if (text.len == 0) return;
+        _ = self.query.insertSlice(self.cursor_pos, text) catch return;
+        self.cursor_pos += text.len;
+    }
+
     pub fn deleteChar(self: *SearchBar) void {
         if (self.cursor_pos == 0) return;
         const start = prevCodepointStart(self.query.items, self.cursor_pos);

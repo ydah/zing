@@ -134,6 +134,10 @@ pub const TreeView = struct {
         }
     }
 
+    pub fn visibleList(self: *TreeView) [](*TreeNode) {
+        return self.visibleNodes();
+    }
+
     fn visibleNodes(self: *TreeView) [](*TreeNode) {
         var nodes = std.ArrayList(*TreeNode).init(self.allocator);
         if (self.root) |*root| {
