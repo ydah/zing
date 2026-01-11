@@ -51,7 +51,7 @@ pub const TreeView = struct {
 
         for (entries) |entry| {
             var current: *TreeNode = &root;
-            var it = std.mem.split(u8, entry.path, "/");
+            var it = std.mem.splitScalar(u8, entry.path, '/');
             while (it.next()) |part| {
                 if (part.len == 0) continue;
                 var child_ptr = findChild(current, part);
@@ -139,7 +139,7 @@ pub const TreeView = struct {
     }
 
     fn visibleNodes(self: *TreeView) [](*TreeNode) {
-        var nodes = std.ArrayList(*TreeNode).init(self.allocator);
+        var nodes = std.array_list.Managed(*TreeNode).init(self.allocator);
         if (self.root) |*root| {
             collectVisible(&nodes, self.expanded, root);
         }
@@ -147,7 +147,7 @@ pub const TreeView = struct {
     }
 };
 
-fn collectVisible(list: *std.ArrayList(*TreeNode), expanded: std.AutoHashMap(*TreeNode, void), node: *TreeNode) void {
+fn collectVisible(list: *std.array_list.Managed(*TreeNode), expanded: std.AutoHashMap(*TreeNode, void), node: *TreeNode) void {
     _ = list.append(node) catch return;
     if (!expanded.contains(node)) return;
     for (node.children) |*child| {
@@ -163,7 +163,7 @@ fn indexOf(nodes: [](*TreeNode), target: *TreeNode) ?usize {
 }
 
 fn appendChild(allocator: std.mem.Allocator, parent: *TreeNode, child: TreeNode) !void {
-    var list = std.ArrayList(TreeNode).init(allocator);
+    var list = std.array_list.Managed(TreeNode).init(allocator);
     defer list.deinit();
     try list.appendSlice(parent.children);
     try list.append(child);

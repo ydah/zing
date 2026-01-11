@@ -46,6 +46,7 @@ pub const Args = struct {
 };
 
 pub const ParseError = error{
+    OutOfMemory,
     MissingValue,
     InvalidValue,
     UnknownFlag,
@@ -54,7 +55,7 @@ pub const ParseError = error{
 
 pub fn parse(allocator: std.mem.Allocator, args: [][]const u8) ParseError!Args {
     var flags = Args.Flags{};
-    var positional = std.ArrayList([]const u8).init(allocator);
+    var positional = std.array_list.Managed([]const u8).init(allocator);
     errdefer positional.deinit();
 
     if (args.len == 0) {

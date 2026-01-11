@@ -42,11 +42,11 @@ fn importZoxideBinary(allocator: std.mem.Allocator, db: *Database, path: []const
 
 fn importZoxideText(db: *Database, data: []const u8) !ImportResult {
     var count: usize = 0;
-    var it = std.mem.split(u8, data, "\n");
+    var it = std.mem.splitScalar(u8, data, '\n');
     while (it.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0 or trimmed[0] == '#') continue;
-        var fields = std.mem.split(u8, trimmed, "\t");
+        var fields = std.mem.splitScalar(u8, trimmed, '\t');
         const path_field = fields.next() orelse continue;
         const score_field = fields.next() orelse continue;
         const time_field = fields.next() orelse "";
@@ -64,21 +64,25 @@ fn importZoxideText(db: *Database, data: []const u8) !ImportResult {
 
 fn runZoxideDump(allocator: std.mem.Allocator, db_path: []const u8) !?[]u8 {
     var argv = [_][]const u8{ "zoxide", "query", "-ls" };
-    var child = std.process.Child.init(&argv, allocator);
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
     env_map.put("ZOXIDE_DB_PATH", db_path) catch {};
     env_map.put("ZOXIDE_DB", db_path) catch {};
-    child.env_map = &env_map;
-    const result = child.run() catch return null;
+    const result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &argv,
+        .env_map = &env_map,
+    }) catch return null;
     defer allocator.free(result.stderr);
     if (result.term.Exited != 0) {
         allocator.free(result.stdout);
         // Retry without score flag.
         var argv2 = [_][]const u8{ "zoxide", "query", "-l" };
-        var child2 = std.process.Child.init(&argv2, allocator);
-        child2.env_map = &env_map;
-        const result2 = child2.run() catch return null;
+        const result2 = std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &argv2,
+            .env_map = &env_map,
+        }) catch return null;
         defer allocator.free(result2.stderr);
         if (result2.term.Exited != 0) {
             allocator.free(result2.stdout);
@@ -96,11 +100,11 @@ fn importZ(allocator: std.mem.Allocator, db: *Database, path: ?[]const u8) !Impo
     defer allocator.free(data);
 
     var count: usize = 0;
-    var it = std.mem.split(u8, data, "\n");
+    var it = std.mem.splitScalar(u8, data, '\n');
     while (it.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0 or trimmed[0] == '#') continue;
-        var fields = std.mem.split(u8, trimmed, "|");
+        var fields = std.mem.splitScalar(u8, trimmed, '|');
         const path_field = fields.next() orelse continue;
         const rank_field = fields.next() orelse continue;
         const time_field = fields.next() orelse "";
@@ -123,11 +127,11 @@ fn importAutojump(allocator: std.mem.Allocator, db: *Database, path: ?[]const u8
     defer allocator.free(data);
 
     var count: usize = 0;
-    var it = std.mem.split(u8, data, "\n");
+    var it = std.mem.splitScalar(u8, data, '\n');
     while (it.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0 or trimmed[0] == '#') continue;
-        var fields = std.mem.split(u8, trimmed, "\t");
+        var fields = std.mem.splitScalar(u8, trimmed, '\t');
         const weight_field = fields.next() orelse continue;
         const path_field = fields.next() orelse continue;
         const score = std.fmt.parseFloat(f64, weight_field) catch continue;

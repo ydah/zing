@@ -24,7 +24,7 @@ pub const PreviewPane = struct {
         var dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch return;
         defer dir.close();
 
-        var entries_list = std.ArrayList(DirEntry).init(allocator);
+        var entries_list = std.array_list.Managed(DirEntry).init(allocator);
         defer entries_list.deinit();
 
         var it = dir.iterate();

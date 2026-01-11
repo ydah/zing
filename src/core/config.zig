@@ -66,7 +66,7 @@ pub const Config = struct {
         var file = try std.fs.cwd().createFile(path, .{ .truncate = true });
         defer file.close();
 
-        try self.writeTo(file.writer());
+        try self.writeTo(file.deprecatedWriter());
     }
 
     pub fn writeTo(self: *Config, writer: anytype) !void {
@@ -204,7 +204,7 @@ fn readConfigFile(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
 
 fn applyToml(cfg: *Config, data: []const u8) void {
     var section: []const u8 = "";
-    var it = std.mem.split(u8, data, "\n");
+    var it = std.mem.splitScalar(u8, data, '\n');
     while (it.next()) |line| {
         var trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0 or trimmed[0] == '#') continue;
@@ -235,9 +235,9 @@ fn parseStringArray(allocator: std.mem.Allocator, value: []const u8) ?[][]const 
     var trimmed = std.mem.trim(u8, value, " \t");
     if (trimmed.len < 2 or trimmed[0] != '[' or trimmed[trimmed.len - 1] != ']') return null;
     trimmed = trimmed[1 .. trimmed.len - 1];
-    var list = std.ArrayList([]const u8).init(allocator);
+    var list = std.array_list.Managed([]const u8).init(allocator);
     errdefer list.deinit();
-    var it = std.mem.split(u8, trimmed, ",");
+    var it = std.mem.splitScalar(u8, trimmed, ',');
     while (it.next()) |item| {
         const part = stripQuotes(std.mem.trim(u8, item, " \t"));
         if (part.len == 0) continue;

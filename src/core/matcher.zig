@@ -22,7 +22,7 @@ pub fn fuzzyMatch(
     const target_cmp = if (smart_case) target else try toLowerAlloc(allocator, target);
     defer if (!smart_case) allocator.free(target_cmp);
 
-    var positions = std.ArrayList(usize).init(allocator);
+    var positions = std.array_list.Managed(usize).init(allocator);
     defer positions.deinit();
 
     var score: i32 = 0;

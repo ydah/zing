@@ -19,7 +19,7 @@ pub const Color = struct {
     }
 
     pub fn toVaxis(self: Color) vaxis.Color {
-        return .{ .r = self.r, .g = self.g, .b = self.b };
+        return .{ .rgb = .{ self.r, self.g, self.b } };
     }
 };
 
@@ -152,13 +152,13 @@ fn readThemeFromFile(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
     defer allocator.free(data);
 
     if (findKeyValue(data, "theme")) |value| {
-        return allocator.dupe(u8, value);
+        return @as(?[]u8, try allocator.dupe(u8, value));
     }
     return null;
 }
 
 fn findKeyValue(data: []const u8, key: []const u8) ?[]const u8 {
-    var it = std.mem.split(u8, data, "\n");
+    var it = std.mem.splitScalar(u8, data, '\n');
     while (it.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r");
         if (trimmed.len == 0 or trimmed[0] == '#') continue;

@@ -107,7 +107,7 @@ pub const App = struct {
         try loop.start();
         defer loop.stop();
 
-        self.state.last_input_ns = std.time.nanoTimestamp() - 200 * std.time.ns_per_ms;
+        self.state.last_input_ns = nowNs() - 200 * std.time.ns_per_ms;
         try self.updateSearch();
 
         var running = true;
@@ -133,7 +133,7 @@ pub const App = struct {
             self.renderFrame(&vx, &tty);
 
             if (!handled_event) {
-                std.time.sleep(16 * std.time.ns_per_ms);
+                std.Thread.sleep(16 * std.time.ns_per_ms);
             }
         }
         if (self.accepted) {
@@ -151,7 +151,7 @@ pub const App = struct {
 
         if (self.state.mode == .list and key.matches('/', .{})) {
             try self.enterSubdirMode();
-            self.state.last_input_ns = std.time.nanoTimestamp();
+            self.state.last_input_ns = nowNs();
             return false;
         }
 
@@ -248,7 +248,7 @@ pub const App = struct {
             }
         }
 
-        self.state.last_input_ns = std.time.nanoTimestamp();
+        self.state.last_input_ns = nowNs();
         return false;
     }
 
@@ -345,7 +345,7 @@ pub const App = struct {
             bar_buf[1 + bar_len] = ']';
             const bar_text = bar_buf[0 .. bar_len + 2];
             if (bar_text.len > 2) {
-                const bar_row = start_row + @intCast(logo_height + 1);
+                const bar_row = start_row + @as(u16, @intCast(logo_height + 1));
                 if (bar_row < win.height) {
                     const bar_col: u16 = if (win.width > bar_text.len)
                         @intCast((win.width - bar_text.len) / 2)
@@ -360,7 +360,7 @@ pub const App = struct {
             }
 
             vx.render(tty.writer()) catch {};
-            std.time.sleep(35 * std.time.ns_per_ms);
+            std.Thread.sleep(35 * std.time.ns_per_ms);
         }
     }
 
@@ -437,7 +437,7 @@ pub const App = struct {
             else
                 styleFromTheme(self.theme.match_highlight, null, true);
 
-            var segments = std.ArrayList(vaxis.Segment).init(self.allocator);
+            var segments = std.array_list.Managed(vaxis.Segment).init(self.allocator);
             defer segments.deinit();
             appendHighlightedSegments(self.allocator, &segments, entry.path, entry.match_positions, base_style, match_style) catch {};
 
@@ -514,7 +514,7 @@ pub const App = struct {
     }
 
     pub fn updateSearch(self: *App) !void {
-        const now = std.time.nanoTimestamp();
+        const now = nowNs();
         if (self.state.last_input_ns == 0) return;
         if (now - self.state.last_input_ns < 100 * std.time.ns_per_ms) return;
         if (self.state.last_search_ns != 0 and self.state.last_search_ns >= self.state.last_input_ns) return;
@@ -558,8 +558,13 @@ pub const App = struct {
         var row: u16 = 0;
         for (nodes) |node| {
             if (row >= win.height) break;
-            const indent = std.mem.repeat(self.allocator, " ", node.depth * 2) catch "";
-            defer if (indent.len > 0) self.allocator.free(indent);
+            const indent_len = node.depth * 2;
+            const indent_buf = self.allocator.alloc(u8, indent_len) catch null;
+            const indent = if (indent_buf) |buf| blk: {
+                @memset(buf, ' ');
+                break :blk buf;
+            } else "";
+            defer if (indent_buf) |buf| self.allocator.free(buf);
             const has_children = node.children.len > 0;
             const expanded = has_children and self.tree.expanded.contains(node);
             const glyph = if (!has_children) " " else if (expanded) "▾" else "▸";
@@ -575,7 +580,7 @@ pub const App = struct {
                 styleFromTheme(self.theme.text_primary, self.theme.bg_highlight, true)
             else
                 styleFromTheme(self.theme.text_primary, null, false);
-            var segments = std.ArrayList(vaxis.Segment).init(self.allocator);
+            var segments = std.array_list.Managed(vaxis.Segment).init(self.allocator);
             defer segments.deinit();
             segments.append(.{ .text = line, .style = style }) catch {};
 
@@ -611,7 +616,7 @@ pub const App = struct {
             total_visits += entry.access_count;
             if (entry.last_access >= start_today) unique_today += 1;
             if (entry.last_access <= now) {
-                const days_ago = @as(i64, @intCast((now - entry.last_access) / day_seconds));
+                const days_ago = @divTrunc(now - entry.last_access, day_seconds);
                 if (days_ago >= 0 and days_ago < 7) {
                     const idx = @as(usize, @intCast(6 - days_ago));
                     activity[idx] += 1.0;
@@ -690,7 +695,7 @@ pub const App = struct {
         if (owned_base) |buf| self.allocator.free(buf);
         self.state.subdir_bar.clear();
         self.state.subdir_mode = true;
-        self.state.last_input_ns = std.time.nanoTimestamp();
+        self.state.last_input_ns = nowNs();
         try self.updateSubdirSearch();
     }
 
@@ -698,7 +703,7 @@ pub const App = struct {
         self.state.subdir_mode = false;
         self.state.subdir_bar.clear();
         self.state.last_search_ns = 0;
-        self.state.last_input_ns = std.time.nanoTimestamp() - 200 * std.time.ns_per_ms;
+        self.state.last_input_ns = nowNs() - 200 * std.time.ns_per_ms;
     }
 
     fn updateSubdirSearch(self: *App) !void {
@@ -754,7 +759,7 @@ fn findSubdirs(
     var dir = std.fs.cwd().openDir(base, .{ .iterate = true }) catch return allocator.alloc(SearchResult, 0);
     defer dir.close();
 
-    var matches = std.ArrayList(ScoredResult).init(allocator);
+    var matches = std.array_list.Managed(ScoredResult).init(allocator);
     defer matches.deinit();
 
     var it = dir.iterate();
@@ -802,29 +807,29 @@ fn scoredResultDesc(_: void, a: ScoredResult, b: ScoredResult) bool {
 
 fn formatBreadcrumbs(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
     if (path.len == 0) return null;
-    var parts = std.ArrayList([]const u8).init(allocator);
+    var parts = std.array_list.Managed([]const u8).init(allocator);
     defer parts.deinit();
 
-    var it = std.mem.split(u8, path, "/");
+    var it = std.mem.splitScalar(u8, path, '/');
     while (it.next()) |part| {
         if (part.len == 0) continue;
         try parts.append(part);
     }
-    if (parts.items.len == 0) return allocator.dupe(u8, "/");
+    if (parts.items.len == 0) return @as(?[]u8, try allocator.dupe(u8, "/"));
 
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
     try out.appendSlice("/");
     for (parts.items, 0..) |part, idx| {
         if (idx > 0) try out.appendSlice(" > ");
         try out.appendSlice(part);
     }
-    return out.toOwnedSlice();
+    return @as(?[]u8, try out.toOwnedSlice());
 }
 
 fn appendHighlightedSegments(
     allocator: std.mem.Allocator,
-    segments: *std.ArrayList(vaxis.Segment),
+    segments: *std.array_list.Managed(vaxis.Segment),
     text: []const u8,
     positions: []const usize,
     base_style: vaxis.Style,
@@ -852,7 +857,7 @@ fn scoreBar(allocator: std.mem.Allocator, score: f64, max_score: f64, width: usi
     if (width == 0) return allocator.alloc(u8, 0);
     const ratio = if (max_score == 0.0) 0.0 else score / max_score;
     const filled = @min(width, @as(usize, @intFromFloat(ratio * @as(f64, @floatFromInt(width)))));
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
     var i: usize = 0;
     while (i < width) : (i += 1) {
@@ -874,7 +879,7 @@ fn treeMaxScore(nodes: [](*TreeNode)) f64 {
 }
 
 fn collectMatchPositions(allocator: std.mem.Allocator, query: []const u8, path: []const u8) ![]usize {
-    var terms = std.ArrayList([]const u8).init(allocator);
+    var terms = std.array_list.Managed([]const u8).init(allocator);
     defer terms.deinit();
     var tok = std.mem.tokenizeAny(u8, query, " \t\r\n");
     while (tok.next()) |term| {
@@ -882,7 +887,7 @@ fn collectMatchPositions(allocator: std.mem.Allocator, query: []const u8, path: 
     }
     if (terms.items.len == 0) return allocator.alloc(usize, 0);
 
-    var positions = std.ArrayList(usize).init(allocator);
+    var positions = std.array_list.Managed(usize).init(allocator);
     defer positions.deinit();
     for (terms.items) |term| {
         const match = try matcher.fuzzyMatch(allocator, term, path);
@@ -894,7 +899,7 @@ fn collectMatchPositions(allocator: std.mem.Allocator, query: []const u8, path: 
     if (positions.items.len == 0) return allocator.alloc(usize, 0);
 
     std.sort.insertion(usize, positions.items, {}, std.sort.asc(usize));
-    var dedup = std.ArrayList(usize).init(allocator);
+    var dedup = std.array_list.Managed(usize).init(allocator);
     defer dedup.deinit();
     var last: ?usize = null;
     for (positions.items) |pos| {
@@ -940,4 +945,8 @@ fn textWidth(win: vaxis.Window, text: []const u8) u16 {
         width +|= win.gwidth(bytes);
     }
     return width;
+}
+
+fn nowNs() u64 {
+    return @as(u64, @intCast(std.time.nanoTimestamp()));
 }

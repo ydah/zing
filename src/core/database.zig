@@ -14,7 +14,7 @@ pub const Entry = struct {
 /// SQLite-backed storage for frecency scores and history.
 pub const Database = struct {
     allocator: std.mem.Allocator,
-    path: []const u8,
+    path: [:0]const u8,
     conn: sqlite.Db,
 
     pub fn init(allocator: std.mem.Allocator, path: []const u8) !Database {
@@ -24,10 +24,14 @@ pub const Database = struct {
             try allocator.dupe(u8, path);
         errdefer allocator.free(resolved_path);
 
-        try ensureDbDir(resolved_path);
+        const resolved_path_z = try allocator.dupeZ(u8, resolved_path);
+        errdefer allocator.free(resolved_path_z);
+        allocator.free(resolved_path);
+
+        try ensureDbDir(resolved_path_z);
 
         var db = try sqlite.Db.init(.{
-            .mode = sqlite.Db.Mode{ .File = resolved_path },
+            .mode = sqlite.Db.Mode{ .File = resolved_path_z },
             .open_flags = .{
                 .write = true,
                 .create = true,
@@ -38,7 +42,7 @@ pub const Database = struct {
 
         var database = Database{
             .allocator = allocator,
-            .path = resolved_path,
+            .path = resolved_path_z,
             .conn = db,
         };
         try database.initSchema();
@@ -111,7 +115,7 @@ pub const Database = struct {
         while (true) : (attempts += 1) {
             var stmt = self.conn.prepare(query) catch |err| {
                 if (isBusy(err) and attempts < 5) {
-                    std.time.sleep(50 * std.time.ns_per_ms);
+                    std.Thread.sleep(50 * std.time.ns_per_ms);
                     continue;
                 }
                 return err;
@@ -120,7 +124,7 @@ pub const Database = struct {
 
             const rows = stmt.all(Row, allocator, .{}, .{}) catch |err| {
                 if (isBusy(err) and attempts < 5) {
-                    std.time.sleep(50 * std.time.ns_per_ms);
+                    std.Thread.sleep(50 * std.time.ns_per_ms);
                     continue;
                 }
                 return err;
@@ -143,7 +147,7 @@ pub const Database = struct {
 
     pub fn search(self: *Database, allocator: std.mem.Allocator, query: []const u8, limit: usize) ![]Entry {
         const all = try self.getAll(allocator);
-        var terms = std.ArrayList([]const u8).init(allocator);
+        var terms = std.array_list.Managed([]const u8).init(allocator);
         defer terms.deinit();
         var tok = std.mem.tokenizeAny(u8, query, " \t\r\n");
         while (tok.next()) |term| {
@@ -152,7 +156,7 @@ pub const Database = struct {
         if (terms.items.len == 0) return all;
         defer allocator.free(all);
 
-        var matches = std.ArrayList(ScoredEntry).init(allocator);
+        var matches = std.array_list.Managed(ScoredEntry).init(allocator);
         defer matches.deinit();
 
         for (all) |entry| {
@@ -287,7 +291,7 @@ fn execWithRetry(db: *sqlite.Db, comptime query: []const u8, values: anytype) !v
     while (true) : (attempts += 1) {
         db.exec(query, .{}, values) catch |err| {
             if (isBusy(err) and attempts < 5) {
-                std.time.sleep(50 * std.time.ns_per_ms);
+                std.Thread.sleep(50 * std.time.ns_per_ms);
                 continue;
             }
             return err;
@@ -307,7 +311,7 @@ fn oneAllocWithRetry(
     while (true) : (attempts += 1) {
         return db.oneAlloc(Row, allocator, query, .{}, values) catch |err| {
             if (isBusy(err) and attempts < 5) {
-                std.time.sleep(50 * std.time.ns_per_ms);
+                std.Thread.sleep(50 * std.time.ns_per_ms);
                 continue;
             }
             return err;

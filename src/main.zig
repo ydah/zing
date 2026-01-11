@@ -19,8 +19,13 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const argv = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, argv);
+    const argv_z = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, argv_z);
+    const argv = try allocator.alloc([]const u8, argv_z.len);
+    defer allocator.free(argv);
+    for (argv_z, 0..) |arg, idx| {
+        argv[idx] = arg;
+    }
 
     const parsed = cli.parse(allocator, argv) catch |err| {
         std.log.err("invalid arguments: {s}", .{@errorName(err)});
@@ -52,6 +57,10 @@ pub fn main() !void {
     }
 }
 
+fn stdoutWriter() std.fs.File.DeprecatedWriter {
+    return std.fs.File.stdout().deprecatedWriter();
+}
+
 fn withDb(
     allocator: std.mem.Allocator,
     args: cli.Args,
@@ -79,7 +88,7 @@ fn handleQuery(args: cli.Args, db: *Database) !void {
     defer freeEntries(std.heap.page_allocator, results);
 
     if (results.len == 0) return;
-    try std.io.getStdOut().writer().print("{s}\n", .{results[0].path});
+    try stdoutWriter().print("{s}\n", .{results[0].path});
 }
 
 fn handleInteractive(args: cli.Args, db: *Database) !void {
@@ -96,7 +105,7 @@ fn handleInteractive(args: cli.Args, db: *Database) !void {
     const selected = try app.run();
     if (selected) |path| {
         defer std.heap.page_allocator.free(path);
-        try std.io.getStdOut().writer().print("{s}\n", .{path});
+        try stdoutWriter().print("{s}\n", .{path});
     }
 }
 
@@ -120,7 +129,7 @@ fn handleList(args: cli.Args, db: *Database) !void {
 
     switch (format) {
         .text => {
-            const out = std.io.getStdOut().writer();
+            const out = stdoutWriter();
             var count: usize = 0;
             for (results) |entry| {
                 if (threshold) |min_score| {
@@ -134,7 +143,7 @@ fn handleList(args: cli.Args, db: *Database) !void {
         .json => {
             var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
-            var buffer = std.ArrayList(u8).init(arena.allocator());
+            var buffer = std.array_list.Managed(u8).init(arena.allocator());
             try buffer.appendSlice("[");
             var first = true;
             var count: usize = 0;
@@ -151,7 +160,7 @@ fn handleList(args: cli.Args, db: *Database) !void {
                 count += 1;
             }
             try buffer.appendSlice("]\n");
-            try std.io.getStdOut().writeAll(buffer.items);
+            try stdoutWriter().writeAll(buffer.items);
         },
     }
 }
@@ -173,7 +182,7 @@ fn handleStats(args: cli.Args, db: *Database) !void {
         total_visits += entry.access_count;
         if (entry.last_access >= start_today) unique_today += 1;
         if (entry.last_access <= now) {
-            const days_ago = @as(i64, @intCast((now - entry.last_access) / day_seconds));
+            const days_ago = @divTrunc(now - entry.last_access, day_seconds);
             if (days_ago >= 0 and days_ago < 7) {
                 const idx = @as(usize, @intCast(6 - days_ago));
                 activity[idx] += 1.0;
@@ -184,7 +193,7 @@ fn handleStats(args: cli.Args, db: *Database) !void {
     const spark = try sparkline.renderSparkline(std.heap.page_allocator, &activity);
     defer std.heap.page_allocator.free(spark);
 
-    const out = std.io.getStdOut().writer();
+    const out = stdoutWriter();
     try out.print("Total directories: {d}\n", .{entries.len});
     try out.print("Total visits: {d}\n", .{total_visits});
     try out.print("Unique today: {d}\n", .{unique_today});
@@ -196,7 +205,7 @@ fn handleConfig(args: cli.Args) !void {
     defer cfg.deinit();
 
     if (args.positional.len == 0) {
-        try cfg.writeTo(std.io.getStdOut().writer());
+        try cfg.writeTo(stdoutWriter());
         return;
     }
     if (std.mem.eql(u8, args.positional[0], "set")) {
@@ -216,7 +225,7 @@ fn handleInit(args: cli.Args) !void {
         break :blk cli.Shell.bash;
     };
     const script = shell_init.getInitScript(shell);
-    try std.io.getStdOut().writer().print("{s}", .{script});
+    try stdoutWriter().print("{s}", .{script});
 }
 
 fn handleImport(args: cli.Args, db: *Database) !void {
@@ -228,7 +237,7 @@ fn handleImport(args: cli.Args, db: *Database) !void {
         .autojump => import_mod.ImportSource.autojump,
     };
     const result = try import_mod.importData(std.heap.page_allocator, db, mapped, path);
-    try std.io.getStdOut().writer().print("imported {d} entries\n", .{result.count});
+    try stdoutWriter().print("imported {d} entries\n", .{result.count});
 }
 
 fn handleHelp() void {
@@ -255,7 +264,7 @@ fn parseSubdirQuery(allocator: std.mem.Allocator, parts: [][]const u8) !struct {
     query: []u8,
     sub_query: ?[]u8,
 } {
-    var base = std.ArrayList([]const u8).init(allocator);
+    var base = std.array_list.Managed([]const u8).init(allocator);
     defer base.deinit();
     var sub_query: ?[]u8 = null;
     for (parts) |part| {
@@ -277,14 +286,14 @@ fn handleSubdirQuery(db: *Database, query: []const u8, sub_query: []const u8) !v
     if (results.len == 0) return;
     const base = results[0].path;
     if (sub_query.len == 0) {
-        try std.io.getStdOut().writer().print("{s}\n", .{base});
+        try stdoutWriter().print("{s}\n", .{base});
         return;
     }
 
     const best = try findBestSubdir(std.heap.page_allocator, base, sub_query);
     defer if (best) |p| std.heap.page_allocator.free(p);
     if (best) |path| {
-        try std.io.getStdOut().writer().print("{s}\n", .{path});
+        try stdoutWriter().print("{s}\n", .{path});
     }
 }
 
@@ -320,18 +329,18 @@ fn parseShellName(name: []const u8) ?cli.Shell {
 fn setupSignals() void {
     if (builtin.os.tag == .windows) return;
     const handler = struct {
-        fn handle(_: c_int) callconv(.C) void {
+        fn handle(_: c_int) callconv(.c) void {
             std.process.exit(0);
         }
     }.handle;
 
     var action = std.posix.Sigaction{
         .handler = .{ .handler = handler },
-        .mask = std.posix.empty_sigset,
+        .mask = std.posix.sigemptyset(),
         .flags = 0,
     };
-    _ = std.posix.sigaction(std.posix.SIG.INT, &action, null) catch {};
-    _ = std.posix.sigaction(std.posix.SIG.TERM, &action, null) catch {};
+    std.posix.sigaction(std.posix.SIG.INT, &action, null);
+    std.posix.sigaction(std.posix.SIG.TERM, &action, null);
 }
 
 fn reportError(err: anyerror) void {

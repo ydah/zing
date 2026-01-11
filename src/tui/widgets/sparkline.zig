@@ -11,7 +11,7 @@ pub fn renderSparkline(allocator: std.mem.Allocator, values: []const f64) ![]u8 
     const range = max_val - min_val;
     const bars = [_][]const u8{ "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
 
-    var out = std.ArrayList(u8).init(allocator);
+    var out = std.array_list.Managed(u8).init(allocator);
     errdefer out.deinit();
     for (values) |v| {
         const norm = if (range == 0.0) 1.0 else (v - min_val) / range;
