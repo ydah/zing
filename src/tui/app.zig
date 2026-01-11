@@ -17,6 +17,9 @@ pub const Mode = enum {
 pub const AppState = struct {
     mode: Mode = .list,
     searchbar: SearchBar,
+    subdir_bar: SearchBar,
+    subdir_mode: bool = false,
+    subdir_base: ?[]u8 = null,
     results: []SearchResult,
     selected_index: usize = 0,
     scroll_offset: usize = 0,
@@ -26,12 +29,14 @@ pub const AppState = struct {
     pub fn init(allocator: std.mem.Allocator) AppState {
         return .{
             .searchbar = SearchBar.init(allocator),
+            .subdir_bar = SearchBar.init(allocator),
             .results = &.{},
         };
     }
 
     pub fn deinit(self: *AppState) void {
         self.searchbar.deinit();
+        self.subdir_bar.deinit();
     }
 };
 
@@ -64,6 +69,7 @@ pub const App = struct {
         self.freeResults();
         self.preview.deinit(self.allocator);
         self.tree.deinit();
+        if (self.state.subdir_base) |base| self.allocator.free(base);
         self.state.deinit();
     }
 
@@ -183,13 +189,33 @@ pub const App = struct {
                 }
             }
         } else if (key.matches(vaxis.Key.backspace, .{})) {
-            self.state.searchbar.deleteChar();
+            if (self.state.subdir_mode) {
+                if (self.state.subdir_bar.cursor_pos == 0) {
+                    self.exitSubdirMode();
+                } else {
+                    self.state.subdir_bar.deleteChar();
+                }
+            } else {
+                self.state.searchbar.deleteChar();
+            }
         } else if (key.matches(vaxis.Key.delete, .{})) {
-            self.state.searchbar.deleteChar();
+            if (self.state.subdir_mode) {
+                self.state.subdir_bar.deleteChar();
+            } else {
+                self.state.searchbar.deleteChar();
+            }
         } else if (key.matchShortcut('u', .{ .ctrl = true })) {
-            self.state.searchbar.clear();
+            if (self.state.subdir_mode) {
+                self.state.subdir_bar.clear();
+            } else {
+                self.state.searchbar.clear();
+            }
         } else if (key.matchShortcut('w', .{ .ctrl = true })) {
-            self.state.searchbar.deleteWord();
+            if (self.state.subdir_mode) {
+                self.state.subdir_bar.deleteWord();
+            } else {
+                self.state.searchbar.deleteWord();
+            }
         } else if (key.matchShortcut('t', .{ .ctrl = true }) or key.matches('\t', .{})) {
             self.state.mode = switch (self.state.mode) {
                 .list => .tree,
@@ -201,7 +227,13 @@ pub const App = struct {
             return true;
         } else if (key.text) |text| {
             if (!mods.ctrl and !mods.alt) {
-                self.state.searchbar.insertText(text);
+                if (std.mem.eql(u8, text, "/") and !self.state.subdir_mode) {
+                    try self.enterSubdirMode();
+                } else if (self.state.subdir_mode) {
+                    self.state.subdir_bar.insertText(text);
+                } else {
+                    self.state.searchbar.insertText(text);
+                }
             }
         }
 
@@ -253,15 +285,27 @@ pub const App = struct {
     }
 
     pub fn renderSearchBar(self: *App, win: vaxis.Window) void {
-        const prompt = self.state.searchbar.prompt;
-        const query = self.state.searchbar.getQuery();
+        const prompt = if (self.state.subdir_mode)
+            "📁 Subdir: "
+        else
+            self.state.searchbar.prompt;
+        const query = if (self.state.subdir_mode)
+            self.state.subdir_bar.getQuery()
+        else
+            self.state.searchbar.getQuery();
+        var line: ?[]u8 = null;
+        if (self.state.subdir_mode and self.state.subdir_base != null) {
+            line = std.fmt.allocPrint(self.allocator, "{s} {s}", .{ self.state.subdir_base.?, query }) catch null;
+        }
+        defer if (line) |buf| self.allocator.free(buf);
+        const display = line orelse query;
         const segments = [_]vaxis.Segment{
             .{
                 .text = prompt,
                 .style = styleFromTheme(self.theme.primary, null, true),
             },
             .{
-                .text = query,
+                .text = display,
                 .style = styleFromTheme(self.theme.text_primary, null, false),
             },
         };
@@ -353,13 +397,17 @@ pub const App = struct {
         if (now - self.state.last_input_ns < 100 * std.time.ns_per_ms) return;
         if (self.state.last_search_ns != 0 and self.state.last_search_ns >= self.state.last_input_ns) return;
 
-        const query = self.state.searchbar.getQuery();
-        const results = try self.db.search(self.allocator, query, 100);
-        self.freeResults();
-        self.state.results = try toSearchResults(self.allocator, results);
-        self.state.selected_index = 0;
-        self.state.scroll_offset = 0;
-        try self.updateTree();
+        if (self.state.subdir_mode) {
+            try self.updateSubdirSearch();
+        } else {
+            const query = self.state.searchbar.getQuery();
+            const results = try self.db.search(self.allocator, query, 100);
+            self.freeResults();
+            self.state.results = try toSearchResults(self.allocator, results);
+            self.state.selected_index = 0;
+            self.state.scroll_offset = 0;
+            try self.updateTree();
+        }
         self.state.last_search_ns = now;
     }
 
@@ -479,6 +527,39 @@ pub const App = struct {
         const delta = @min(remaining, 10);
         self.state.selected_index += delta;
     }
+
+    fn enterSubdirMode(self: *App) !void {
+        var owned_base: ?[]u8 = null;
+        const selected = self.selectedPath();
+        const base = if (selected) |path| path else blk: {
+            owned_base = try std.process.getCwdAlloc(self.allocator);
+            break :blk owned_base.?;
+        };
+        if (self.state.subdir_base) |prev| self.allocator.free(prev);
+        self.state.subdir_base = try self.allocator.dupe(u8, base);
+        if (owned_base) |buf| self.allocator.free(buf);
+        self.state.subdir_bar.clear();
+        self.state.subdir_mode = true;
+        self.state.last_input_ns = std.time.nanoTimestamp();
+        try self.updateSubdirSearch();
+    }
+
+    fn exitSubdirMode(self: *App) void {
+        self.state.subdir_mode = false;
+        self.state.subdir_bar.clear();
+        self.state.last_search_ns = 0;
+        self.state.last_input_ns = std.time.nanoTimestamp() - 200 * std.time.ns_per_ms;
+    }
+
+    fn updateSubdirSearch(self: *App) !void {
+        const base = self.state.subdir_base orelse return;
+        const query = self.state.subdir_bar.getQuery();
+        const results = try findSubdirs(self.allocator, base, query, 100);
+        self.freeResults();
+        self.state.results = results;
+        self.state.selected_index = 0;
+        self.state.scroll_offset = 0;
+    }
 };
 
 fn toSearchResults(allocator: std.mem.Allocator, entries: []const @import("../core/database.zig").Entry) ![]SearchResult {
@@ -506,4 +587,56 @@ fn freeEntries(allocator: std.mem.Allocator, entries: []const @import("../core/d
         allocator.free(entry.path);
     }
     allocator.free(entries);
+}
+
+fn findSubdirs(
+    allocator: std.mem.Allocator,
+    base: []const u8,
+    query: []const u8,
+    limit: usize,
+) ![]SearchResult {
+    var dir = std.fs.cwd().openDir(base, .{ .iterate = true }) catch return allocator.alloc(SearchResult, 0);
+    defer dir.close();
+
+    var matches = std.ArrayList(ScoredResult).init(allocator);
+    defer matches.deinit();
+
+    var it = dir.iterate();
+    while (try it.next()) |entry| {
+        if (entry.kind != .directory) continue;
+        if (query.len == 0) {
+            const path = try std.fs.path.join(allocator, &.{ base, entry.name });
+            try matches.append(.{ .result = .{ .path = path, .score = 0.0 }, .score = 0.0 });
+            continue;
+        }
+        const match = try @import("../core/matcher.zig").fuzzyMatch(allocator, query, entry.name);
+        if (match) |m| {
+            const path = try std.fs.path.join(allocator, &.{ base, entry.name });
+            try matches.append(.{
+                .result = .{ .path = path, .score = @floatFromInt(m.score) },
+                .score = m.score,
+            });
+            allocator.free(m.positions);
+        }
+    }
+
+    std.sort.insertion(ScoredResult, matches.items, {}, scoredResultDesc);
+    const count = @min(limit, matches.items.len);
+    var results = try allocator.alloc(SearchResult, count);
+    for (matches.items[0..count], 0..) |item, idx| {
+        results[idx] = item.result;
+    }
+    for (matches.items[count..]) |item| {
+        allocator.free(item.result.path);
+    }
+    return results;
+}
+
+const ScoredResult = struct {
+    result: SearchResult,
+    score: i32,
+};
+
+fn scoredResultDesc(_: void, a: ScoredResult, b: ScoredResult) bool {
+    return a.score > b.score;
 }
