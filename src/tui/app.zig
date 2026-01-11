@@ -296,12 +296,15 @@ pub const App = struct {
             self.state.subdir_bar.getQuery()
         else
             self.state.searchbar.getQuery();
-        var line: ?[]u8 = null;
+        var display = query;
         if (self.state.subdir_mode and self.state.subdir_base != null) {
-            line = std.fmt.allocPrint(self.allocator, "{s} {s}", .{ self.state.subdir_base.?, query }) catch null;
+            const crumbs = formatBreadcrumbs(self.allocator, self.state.subdir_base.?) catch null;
+            if (crumbs) |crumbs_buf| {
+                defer self.allocator.free(crumbs_buf);
+                display = std.fmt.allocPrint(self.allocator, "{s} {s}", .{ crumbs_buf, query }) catch display;
+            }
         }
-        defer if (line) |buf| self.allocator.free(buf);
-        const display = line orelse query;
+        defer if (display.ptr != query.ptr) self.allocator.free(display);
         const segments = [_]vaxis.Segment{
             .{
                 .text = prompt,
@@ -705,6 +708,28 @@ const ScoredResult = struct {
 
 fn scoredResultDesc(_: void, a: ScoredResult, b: ScoredResult) bool {
     return a.score > b.score;
+}
+
+fn formatBreadcrumbs(allocator: std.mem.Allocator, path: []const u8) !?[]u8 {
+    if (path.len == 0) return null;
+    var parts = std.ArrayList([]const u8).init(allocator);
+    defer parts.deinit();
+
+    var it = std.mem.split(u8, path, "/");
+    while (it.next()) |part| {
+        if (part.len == 0) continue;
+        try parts.append(part);
+    }
+    if (parts.items.len == 0) return allocator.dupe(u8, "/");
+
+    var out = std.ArrayList(u8).init(allocator);
+    errdefer out.deinit();
+    try out.appendSlice("/");
+    for (parts.items, 0..) |part, idx| {
+        if (idx > 0) try out.appendSlice(" > ");
+        try out.appendSlice(part);
+    }
+    return out.toOwnedSlice();
 }
 
 fn appendHighlightedSegments(
