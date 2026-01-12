@@ -8,9 +8,9 @@ A modern directory jumper with a visual-first TUI, built in Zig.
 
 [English](README.md) | [日本語](doc/README-ja.md)
 
-[![Build Status](https://github.com/yourname/zing/workflows/CI/badge.svg)](https://github.com/yourname/zing/actions)
+[![Build Status](https://github.com/ydah/zing/workflows/CI/badge.svg)](https://github.com/ydah/zing/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/yourname/zing)](https://github.com/yourname/zing/releases)
+[![GitHub release](https://img.shields.io/github/v/release/ydah/zing)](https://github.com/ydah/zing/releases)
 
 </div>
 
@@ -116,7 +116,7 @@ zing stats
 ### Build from source (Zig 0.15.x)
 
 ```bash
-git clone https://github.com/yourname/zing.git
+git clone https://github.com/ydah/zing.git
 cd zing
 zig build -Doptimize=ReleaseFast
 sudo cp zig-out/bin/zing /usr/local/bin/
