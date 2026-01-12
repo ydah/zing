@@ -8,24 +8,34 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    env:
+      ZIG_LOCAL_CACHE_DIR: /tmp/zig-cache/local
+      ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache/global
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Install Zig
-        run: |
-          set -euo pipefail
-          ZIG_VERSION=0.15.1
-          ZIG_URL="$(python3 -c 'import json, urllib.request; version=\"0.15.1\"; data=json.load(urllib.request.urlopen(\"https://ziglang.org/download/index.json\")); print(data[version][\"x86_64-linux\"][\"tarball\"])')"
-          curl -fL "$ZIG_URL" -o zig.tar.xz
-          tar -xf zig.tar.xz
-          echo "${PWD}/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Cache
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          path: |
+            /nix
+            /tmp/zig-cache
+
+      - name: Prepare Zig cache dirs
+        run: mkdir -p /tmp/zig-cache/local /tmp/zig-cache/global
 
       - name: Build (Debug)
-        run: zig build
+        run: nix develop -c zig build
 
       - name: Build (ReleaseFast)
-        run: zig build -Doptimize=ReleaseFast
+        run: nix develop -c zig build -Doptimize=ReleaseFast
 
       - name: Test
-        run: zig build test
+        run: nix develop -c zig build test
