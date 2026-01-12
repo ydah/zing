@@ -103,6 +103,13 @@ zing stats
 
 ## インストール
 
+### Homebrew
+
+```bash
+brew tap ydah/zing
+brew install zing
+```
+
 ### ソースからビルド（Zig 0.15.x）
 
 ```bash
