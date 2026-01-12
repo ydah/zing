@@ -12,10 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.1
+      - name: Install Zig
+        run: |
+          set -euo pipefail
+          ZIG_VERSION=0.15.1
+          ZIG_URL="$(python3 -c 'import json, urllib.request; version=\"0.15.1\"; data=json.load(urllib.request.urlopen(\"https://ziglang.org/download/index.json\")); print(data[version][\"x86_64-linux\"][\"tarball\"])')"
+          curl -fL "$ZIG_URL" -o zig.tar.xz
+          tar -xf zig.tar.xz
+          echo "${PWD}/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
 
       - name: Build (Debug)
         run: zig build
