@@ -15,7 +15,7 @@
     flake-compat.url = "github:edolstra/flake-compat";
   };
 
-  outputs = { self, nixpkgs, flake-utils, zig }:
+  outputs = { self, nixpkgs, flake-utils, zig, flake-compat }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {

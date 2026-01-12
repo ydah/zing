@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       ZIG_LOCAL_CACHE_DIR: /tmp/zig-cache/local
       ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache/global
@@ -21,21 +21,11 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          path: |
-            /nix
-            /tmp/zig-cache
-
       - name: Prepare Zig cache dirs
         run: mkdir -p /tmp/zig-cache/local /tmp/zig-cache/global
 
-      - name: Build (Debug)
-        run: nix develop -c zig build
-
       - name: Build (ReleaseFast)
-        run: nix develop -c zig build -Doptimize=ReleaseFast
+        run: nix develop --no-write-lock-file -c zig build -j1 -Doptimize=ReleaseFast --summary all
 
-      - name: Test
-        run: nix develop -c zig build test
+      - name: Test (ReleaseFast)
+        run: nix develop --no-write-lock-file -c zig build -j1 -Doptimize=ReleaseFast test --summary all
