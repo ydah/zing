@@ -27,9 +27,9 @@ pub fn script() []const u8 {
         \\  builtin cd "$@" && command zing add "$PWD"
         \\}
         \\
-        \\if ! command -v _zing_cd_original >/dev/null 2>&1; then
-        \\  alias _zing_cd_original=cd
-        \\  alias cd='__zing_cd'
+        \\if ! command -v _zing_zcd_wrapped >/dev/null 2>&1; then
+        \\  alias _zing_zcd_wrapped=true
+        \\  alias zcd='__zing_cd'
         \\fi
         \\
         \\_zing_complete() {
