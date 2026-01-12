@@ -1,6 +1,6 @@
 <div align="center">
 
-# zing
+<img src="assets/logo-header.svg" alt="zing header logo">
 
 A modern directory jumper with a visual-first TUI, built in Zig.
 

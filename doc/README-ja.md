@@ -1,6 +1,6 @@
 <div align="center">
 
-# zing
+<img src="../assets/logo-header.svg" alt="zingのヘッダーロゴ">
 
 Zigで作られた、ビジュアル重視のモダンディレクトリジャンパー。
 
