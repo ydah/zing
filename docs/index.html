@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>zing — fast directory jumping with a live TUI</title>
+    <meta
+      name="description"
+      content="zing is a fast directory jumper with fuzzy matching, frecency scoring, and a modern interactive TUI."
+    />
+    <meta property="og:title" content="zing — fast directory jumping" />
+    <meta
+      property="og:description"
+      content="Fuzzy matching, frecency scoring, and a modern interactive TUI."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="assets/tui-screenshot.png" />
+    <link rel="icon" href="assets/logo-header.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav">
+        <div class="logo">
+          <img src="assets/logo-header.svg" alt="zing logo" />
+        </div>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#tui">TUI</a>
+          <a href="#install">Install</a>
+          <a href="#usage">Usage</a>
+          <a href="#community">Community</a>
+          <a class="cta" href="https://github.com/ydah/zing">GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-content">
+          <p class="eyebrow">Fast. Focused. Terminal-native.</p>
+          <h1>
+            Jump to the right directory
+            <span class="gradient-text">instantly.</span>
+          </h1>
+          <p class="lead">
+            zing learns where you work, ranks by frecency, and gives you a
+            live TUI with previews, tree view, and stats. No lag. No guessing.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#install">Get started</a>
+            <a class="button ghost" href="https://github.com/ydah/zing">
+              View on GitHub
+            </a>
+          </div>
+          <div class="hero-meta">
+            <span>Fuzzy matching</span>
+            <span>Frecency scoring</span>
+            <span>Live preview</span>
+            <span>Zig-powered</span>
+          </div>
+        </div>
+        <div class="hero-media">
+          <div class="media-card">
+            <img src="assets/demo-jump.gif" alt="Smart jump demo" />
+          </div>
+          <div class="media-caption">Smart jump in motion</div>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-title">
+          <p class="eyebrow">Features</p>
+          <h2>Everything you need to navigate fast.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Frecency scoring</h3>
+            <p>
+              Ranked by how often and how recently you visit. The right place
+              floats to the top.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Live preview</h3>
+            <p>
+              Peek into directories before jumping. No more dead ends or backtracking.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Tree view</h3>
+            <p>
+              Expand and collapse the file tree to understand structure at a glance.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Stats dashboard</h3>
+            <p>
+              Track what you touch most with built-in stats and activity trends.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Blazing fast</h3>
+            <p>
+              Built with Zig for low latency and predictable performance.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Shell native</h3>
+            <p>
+              Tight integration for bash, zsh, and fish with simple init scripts.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="tui" class="section tui-showcase">
+        <div class="section-title">
+          <p class="eyebrow">TUI</p>
+          <h2>Designed for terminal flow.</h2>
+        </div>
+        <div class="showcase-grid">
+          <div class="showcase-card">
+            <img src="assets/tui-screenshot.png" alt="TUI interface" />
+            <h3>Live search + preview</h3>
+            <p>Instant results with context, without leaving your terminal.</p>
+          </div>
+          <div class="showcase-card">
+            <img src="assets/tree-view.png" alt="Tree view" />
+            <h3>Tree navigation</h3>
+            <p>Expand the structure without losing your selection.</p>
+          </div>
+          <div class="showcase-card">
+            <img src="assets/stats-dashboard.png" alt="Stats dashboard" />
+            <h3>Stats dashboard</h3>
+            <p>Monitor activity to discover your real workflow.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="section install">
+        <div class="section-title">
+          <p class="eyebrow">Install</p>
+          <h2>Get zing in minutes.</h2>
+        </div>
+        <div class="install-grid">
+          <div class="install-card">
+            <h3>Homebrew</h3>
+            <pre><code>brew tap ydah/zing
+brew install zing</code></pre>
+          </div>
+          <div class="install-card">
+            <h3>Build from source (Zig 0.15.x)</h3>
+            <pre><code>git clone https://github.com/ydah/zing.git
+cd zing
+zig build -Doptimize=ReleaseFast
+sudo cp zig-out/bin/zing /usr/local/bin/</code></pre>
+          </div>
+          <div class="install-card">
+            <h3>Shell integration</h3>
+            <pre><code># bash
+source &lt;(zing init bash)
+
+# zsh
+eval "$(zing init zsh)"
+
+# fish
+zing init fish | source</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="usage" class="section usage">
+        <div class="section-title">
+          <p class="eyebrow">Usage</p>
+          <h2>Move fast with short commands.</h2>
+        </div>
+        <div class="usage-grid">
+          <div class="usage-card">
+            <h3>Interactive</h3>
+            <pre><code>zi
+zi foo</code></pre>
+          </div>
+          <div class="usage-card">
+            <h3>Admin</h3>
+            <pre><code>zing add ~/new-project
+zing remove ~/old-dir
+zing list
+zing stats</code></pre>
+          </div>
+          <div class="usage-card">
+            <h3>Import</h3>
+            <pre><code>zing import --from=zoxide
+zing import --from=z ~/.z
+zing import --from=autojump</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="community" class="section community">
+        <div class="section-title">
+          <p class="eyebrow">Community</p>
+          <h2>Stay in the loop.</h2>
+        </div>
+        <div class="community-grid">
+          <a class="community-card" href="https://github.com/ydah/zing">
+            <h3>GitHub Repo</h3>
+            <p>Star, watch, or contribute.</p>
+          </a>
+          <a class="community-card" href="https://github.com/ydah/zing/issues">
+            <h3>Issues</h3>
+            <p>Report bugs or request features.</p>
+          </a>
+          <a class="community-card" href="https://github.com/ydah/zing/releases">
+            <h3>Releases</h3>
+            <p>Download the latest builds.</p>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        zing is open source and built for fast terminal workflows.
+        <a href="https://github.com/ydah/zing">GitHub ↗</a>
+      </p>
+    </footer>
+  </body>
+</html>
