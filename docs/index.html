@@ -14,17 +14,14 @@
       content="Fuzzy matching, frecency scoring, and a modern interactive TUI."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="assets/tui-screenshot.png" />
-    <link rel="icon" href="assets/logo-header.svg" type="image/svg+xml" />
+    <meta property="og:image" content="media/tui-screenshot.png" />
     <link rel="stylesheet" href="styles.css" />
     <script defer src="app.js"></script>
   </head>
   <body>
     <header class="site-header">
       <nav class="nav">
-        <div class="logo">
-          <img src="assets/logo-header.svg" alt="zing logo" />
-        </div>
+        <div class="brand">zing</div>
         <div class="nav-links">
           <a href="#features">Features</a>
           <a href="#tui">TUI</a>
@@ -62,10 +59,15 @@
           </div>
         </div>
         <div class="hero-media">
-          <div class="media-card">
-            <img src="assets/demo-jump.gif" alt="Smart jump demo" />
+          <div class="media-card terminal-stack">
+            <img src="media/tui-screenshot.png" alt="TUI screenshot" />
+            <img
+              class="stacked"
+              src="media/themes-comparison.png"
+              alt="Theme comparison"
+            />
           </div>
-          <div class="media-caption">Smart jump in motion</div>
+          <div class="media-caption">TUI layouts and theme polish</div>
         </div>
       </section>
 
@@ -122,17 +124,14 @@
         </div>
         <div class="showcase-grid">
           <div class="showcase-card">
-            <img src="assets/tui-screenshot.png" alt="TUI interface" />
             <h3>Live search + preview</h3>
             <p>Instant results with context, without leaving your terminal.</p>
           </div>
           <div class="showcase-card">
-            <img src="assets/tree-view.png" alt="Tree view" />
             <h3>Tree navigation</h3>
             <p>Expand the structure without losing your selection.</p>
           </div>
           <div class="showcase-card">
-            <img src="assets/stats-dashboard.png" alt="Stats dashboard" />
             <h3>Stats dashboard</h3>
             <p>Monitor activity to discover your real workflow.</p>
           </div>
@@ -147,19 +146,41 @@
         <div class="install-grid">
           <div class="install-card">
             <h3>Homebrew</h3>
-            <pre><code>brew tap ydah/zing
+            <div class="code-block">
+              <button class="copy-button" type="button" data-copy="brew tap ydah/zing&#10;brew install zing">
+                Copy
+              </button>
+              <pre><code>brew tap ydah/zing
 brew install zing</code></pre>
+            </div>
           </div>
           <div class="install-card">
             <h3>Build from source (Zig 0.15.x)</h3>
-            <pre><code>git clone https://github.com/ydah/zing.git
+            <div class="code-block">
+              <button
+                class="copy-button"
+                type="button"
+                data-copy="git clone https://github.com/ydah/zing.git&#10;cd zing&#10;zig build -Doptimize=ReleaseFast&#10;sudo cp zig-out/bin/zing /usr/local/bin/"
+              >
+                Copy
+              </button>
+              <pre><code>git clone https://github.com/ydah/zing.git
 cd zing
 zig build -Doptimize=ReleaseFast
 sudo cp zig-out/bin/zing /usr/local/bin/</code></pre>
+            </div>
           </div>
           <div class="install-card">
             <h3>Shell integration</h3>
-            <pre><code># bash
+            <div class="code-block">
+              <button
+                class="copy-button"
+                type="button"
+                data-copy="# bash&#10;source &lt;(zing init bash)&#10;&#10;# zsh&#10;eval &quot;$(zing init zsh)&quot;&#10;&#10;# fish&#10;zing init fish | source"
+              >
+                Copy
+              </button>
+              <pre><code># bash
 source &lt;(zing init bash)
 
 # zsh
@@ -167,6 +188,7 @@ eval "$(zing init zsh)"
 
 # fish
 zing init fish | source</code></pre>
+            </div>
           </div>
         </div>
       </section>
