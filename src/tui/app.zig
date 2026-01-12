@@ -149,6 +149,7 @@ pub const App = struct {
 
     pub fn handleKeyEvent(self: *App, key: vaxis.Key) !bool {
         const mods = key.mods;
+        var input_changed = false;
         if (key.matches('q', .{})) return true;
         if (key.matches(vaxis.Key.escape, .{})) return true;
 
@@ -208,27 +209,35 @@ pub const App = struct {
                     self.exitSubdirMode();
                 } else {
                     self.state.subdir_bar.deleteChar();
+                    input_changed = true;
                 }
             } else {
                 self.state.searchbar.deleteChar();
+                input_changed = true;
             }
         } else if (key.matches(vaxis.Key.delete, .{})) {
             if (self.state.subdir_mode) {
                 self.state.subdir_bar.deleteChar();
+                input_changed = true;
             } else {
                 self.state.searchbar.deleteChar();
+                input_changed = true;
             }
         } else if (key.matchShortcut('u', .{ .ctrl = true })) {
             if (self.state.subdir_mode) {
                 self.state.subdir_bar.clear();
+                input_changed = true;
             } else {
                 self.state.searchbar.clear();
+                input_changed = true;
             }
         } else if (key.matchShortcut('w', .{ .ctrl = true })) {
             if (self.state.subdir_mode) {
                 self.state.subdir_bar.deleteWord();
+                input_changed = true;
             } else {
                 self.state.searchbar.deleteWord();
+                input_changed = true;
             }
         } else if (key.matches('\t', .{})) {
             self.state.mode = switch (self.state.mode) {
@@ -245,13 +254,17 @@ pub const App = struct {
                     try self.enterSubdirMode();
                 } else if (self.state.subdir_mode) {
                     self.state.subdir_bar.insertText(text);
+                    input_changed = true;
                 } else {
                     self.state.searchbar.insertText(text);
+                    input_changed = true;
                 }
             }
         }
 
-        self.state.last_input_ns = nowNs();
+        if (input_changed) {
+            self.state.last_input_ns = nowNs();
+        }
         return false;
     }
 
