@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    env:
+      ZIG_LOCAL_CACHE_DIR: /tmp/zig-cache/local
+      ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache/global
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Prepare Zig cache dirs
+        run: mkdir -p /tmp/zig-cache/local /tmp/zig-cache/global
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: nix develop --no-write-lock-file -c zig build -j1 -Doptimize=ReleaseFast --summary all
+
+      - name: Build (macOS x86_64)
+        if: runner.os == 'macOS'
+        run: nix develop --no-write-lock-file -c zig build -j1 -Doptimize=ReleaseFast -Dtarget=x86_64-macos --prefix dist/x86_64 --summary all
+
+      - name: Build (macOS arm64)
+        if: runner.os == 'macOS'
+        run: nix develop --no-write-lock-file -c zig build -j1 -Doptimize=ReleaseFast -Dtarget=aarch64-macos --prefix dist/aarch64 --summary all
+
+      - name: Create universal binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          lipo -create -output dist/zing-macos-universal \
+            dist/x86_64/bin/zing \
+            dist/aarch64/bin/zing
+
+      - name: Stage Linux binary
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp zig-out/bin/zing dist/zing-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zing-${{ matrix.os }}
+          path: dist/zing-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/zing-*
