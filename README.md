@@ -26,15 +26,11 @@ Type fragments of a path and zing finds the best match instantly.
 
 ![Smart jump demo](assets/demo-jump.gif)
 
-Image placeholder: paste the smart-jump demo GIF at `assets/demo-jump.gif`.
-
 ### Interactive TUI (List, Preview, Tree, Stats)
 
 Launch `zi` for a visual selector with live search, preview, and score bars.
 
 ![TUI screenshot](assets/tui-screenshot.png)
-
-Image placeholder: paste the main TUI screenshot at `assets/tui-screenshot.png`.
 
 ### Frecency Scoring
 
@@ -60,19 +56,13 @@ Inspect directory hierarchy and usage trends at a glance.
 
 ![Tree view](assets/tree-view.png)
 
-Image placeholder: paste the tree view screenshot at `assets/tree-view.png`.
-
 ![Stats dashboard](assets/stats-dashboard.png)
-
-Image placeholder: paste the stats dashboard screenshot at `assets/stats-dashboard.png`.
 
 ### Themes
 
 Four built-in themes: `default`, `nord`, `dracula`, `gruvbox`.
 
 ![Theme comparison](assets/themes-comparison.png)
-
-Image placeholder: paste the theme comparison image at `assets/themes-comparison.png`.
 
 ---
 
