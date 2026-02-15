@@ -18,7 +18,7 @@ jobs:
       ZIG_GLOBAL_CACHE_DIR: /tmp/zig-cache/global
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Nix
         uses: cachix/install-nix-action@v27
