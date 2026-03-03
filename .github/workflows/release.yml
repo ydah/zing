@@ -55,7 +55,7 @@ jobs:
           cp zig-out/bin/zing dist/zing-linux-x86_64
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zing-${{ matrix.os }}
           path: dist/zing-*
